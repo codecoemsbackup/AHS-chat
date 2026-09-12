@@ -1,0 +1,3 @@
+- [Server schema transition](database-transition.md) — legacy friend tables remain in development while the runtime uses the new server/channel tables.
+- [Nullable auth profile fields](nullable-auth-fields.md) — legacy Replit users may have no username; never map nullable profile data directly into non-null booleans.
+- [Legacy table rename prompts](drizzle-rename-prompts.md) — Drizzle may flag new table names as legacy renames; choose create-new and preserve existing tables/data.
