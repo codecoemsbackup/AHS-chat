@@ -3,8 +3,8 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 export const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
-export const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
-export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 const MIME_EXTENSIONS: Record<string, string> = {
   "image/gif": "gif",
