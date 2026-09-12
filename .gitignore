@@ -1,0 +1,7 @@
+node_modules
+dist
+.DS_Store
+server/public
+uploads
+vite.config.ts.*
+*.tar.gz
