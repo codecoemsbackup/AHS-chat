@@ -1,5 +1,5 @@
-export const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
-export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const ATTACHMENT_ACCEPT =
   "image/png,image/jpeg,image/gif,image/webp,application/pdf,application/zip,text/plain,.docx,.xlsx";
 
