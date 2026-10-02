@@ -690,7 +690,15 @@ export default function ChatPage() {
                       </p>
                     </div>
                   ) : (
-                    visibleMessages.map((message) => {
+                    visibleMessages.map((message, index) => {
+                      const messageDate = message.createdAt ? new Date(message.createdAt) : null;
+                      const previousDate =
+                        index > 0 && visibleMessages[index - 1].createdAt
+                          ? new Date(visibleMessages[index - 1].createdAt!)
+                          : null;
+                      const isNewDay =
+                        !!messageDate &&
+                        (!previousDate || messageDate.toDateString() !== previousDate.toDateString());
                       const sender = members.find((member) => member.id === message.senderId);
                       const senderName = sender?.username || sender?.firstName || "Member";
                       const attachment =
@@ -706,8 +714,22 @@ export default function ChatPage() {
                             }
                           : undefined;
                       return (
+                        <div key={message.id}>
+                          {isNewDay && messageDate && (
+                            <div className="mb-4 mt-7 flex items-center gap-3 text-xs font-medium text-muted-foreground">
+                              <span className="h-px flex-1 bg-border" />
+                              <span className="shrink-0">
+                                {messageDate.toLocaleDateString([], {
+                                  weekday: "long",
+                                  month: "long",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </span>
+                              <span className="h-px flex-1 bg-border" />
+                            </div>
+                          )}
                         <ChatBubble
-                          key={message.id}
                           message={message.content}
                           timestamp={
                             message.createdAt
@@ -742,6 +764,7 @@ export default function ChatPage() {
                           canDelete={user.isAdmin}
                           onDelete={() => deleteMessageMutation.mutate(message.id)}
                         />
+                        </div>
                       );
                     })
                   )}
