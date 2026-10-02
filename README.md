@@ -3,3 +3,7 @@ This is a website designed for students by a student for a very specific highsch
 Gmail: codecoems@gmail.com 
 Outlook: codecoems@outlook.com
 Discord: CodeCoems
+
+Members can start private direct-message conversations from the member list. New conversations are message requests; recipients must accept before either member can read or send messages.
+
+After pulling schema changes, apply them to the configured database with `npm run db:push`.

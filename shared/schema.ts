@@ -90,6 +90,49 @@ export const serverMessages = pgTable("server_messages", {
   deletedBy: varchar("deleted_by").references(() => users.id, { onDelete: "set null" }),
 });
 
+export const dmConversations = pgTable(
+  "dm_conversations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    participantOneId: varchar("participant_one_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    participantTwoId: varchar("participant_two_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requesterId: varchar("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: varchar("status").notNull().default("pending"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("dm_conversations_participants_unique").on(
+      table.participantOneId,
+      table.participantTwoId,
+    ),
+    index("dm_conversations_participant_one_idx").on(table.participantOneId),
+    index("dm_conversations_participant_two_idx").on(table.participantTwoId),
+  ],
+);
+
+export const dmMessages = pgTable(
+  "dm_messages",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    conversationId: varchar("conversation_id")
+      .notNull()
+      .references(() => dmConversations.id, { onDelete: "cascade" }),
+    senderId: varchar("sender_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("dm_messages_conversation_created_idx").on(table.conversationId, table.createdAt)],
+);
+
 export const bannedUsers = pgTable("banned_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id")
@@ -160,6 +203,18 @@ export const insertServerMessageSchema = createInsertSchema(serverMessages)
     }
   });
 
+export const insertDmMessageSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
+});
+
+export const createDmConversationSchema = z.object({
+  recipientId: z.string().min(1),
+});
+
+export const respondToDmRequestSchema = z.object({
+  accepted: z.boolean(),
+});
+
 export const updateUsernameSchema = z.object({
   username: z.string().trim().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/),
 });
@@ -206,5 +261,14 @@ export type MessageReplyPreview = {
 };
 export type ServerMessageWithRelations = ServerMessage & {
   reply?: MessageReplyPreview;
+};
+export type DmConversation = typeof dmConversations.$inferSelect;
+export type DmMessage = typeof dmMessages.$inferSelect;
+export type DmConversationWithPeer = DmConversation & {
+  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status">;
+  isIncoming: boolean;
+};
+export type DmMessageWithSender = DmMessage & {
+  sender: Pick<User, "id" | "username" | "firstName" | "profileImageUrl">;
 };
 export type BannedUser = typeof bannedUsers.$inferSelect;

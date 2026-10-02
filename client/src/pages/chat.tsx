@@ -6,6 +6,7 @@ import {
   Megaphone,
   LockKeyhole,
   LogOut,
+  MessageSquare,
   Search,
   Settings,
   ShieldCheck,
@@ -25,6 +26,8 @@ import { getSocket } from "@/lib/socket";
 import { fileToDataUrl, MAX_AVATAR_BYTES } from "@/lib/fileUploads";
 import type {
   Channel,
+  DmConversationWithPeer,
+  DmMessageWithSender,
   MessageReplyPreview,
   Server,
   ServerMessageWithRelations,
@@ -42,6 +45,7 @@ import UsernameSetup from "@/components/UsernameSetup";
 import ServerSettingsDialog, {
   type ServerMember,
 } from "@/components/ServerSettingsDialog";
+import DirectMessagePanel from "@/components/DirectMessagePanel";
 
 interface ServerData {
   server: Server;
@@ -68,6 +72,7 @@ export default function ChatPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [selectedDmId, setSelectedDmId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
@@ -87,6 +92,10 @@ export default function ChatPage() {
 
   const { data: serverData, isLoading: serverLoading } = useQuery<ServerData>({
     queryKey: ["/api/server"],
+    enabled: !!user,
+  });
+  const { data: dmConversations = [] } = useQuery<DmConversationWithPeer[]>({
+    queryKey: ["/api/dms"],
     enabled: !!user,
   });
   const channels = serverData?.channels || [];
@@ -228,11 +237,29 @@ export default function ChatPage() {
         variant: "destructive",
       });
     };
+    const handleDmMessage = ({
+      conversationId,
+      message,
+    }: {
+      conversationId: string;
+      message: DmMessageWithSender;
+    }) => {
+      queryClient.setQueryData<DmMessageWithSender[]>(
+        [`/api/dms/${conversationId}/messages`],
+        (old = []) => (old.some((item) => item.id === message.id) ? old : [...old, message]),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+    };
+    const handleDmUpdated = () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+    };
 
     socket.on("message:receive", handleMessageReceive);
     socket.on("message:deleted", handleMessageDeleted);
     socket.on("mention:received", handleMentionReceived);
     socket.on("message:error", handleMessageError);
+    socket.on("dm:message", handleDmMessage);
+    socket.on("dm:updated", handleDmUpdated);
     socket.on("member:typing", handleTyping);
     socket.on("member:status", invalidateServer);
     socket.on("member:updated", handleMemberUpdated);
@@ -246,6 +273,8 @@ export default function ChatPage() {
       socket.off("message:deleted", handleMessageDeleted);
       socket.off("mention:received", handleMentionReceived);
       socket.off("message:error", handleMessageError);
+      socket.off("dm:message", handleDmMessage);
+      socket.off("dm:updated", handleDmUpdated);
       socket.off("member:typing", handleTyping);
       socket.off("member:status", invalidateServer);
       socket.off("member:updated", handleMemberUpdated);
@@ -429,6 +458,7 @@ export default function ChatPage() {
       ),
     [members, memberSearch],
   );
+  const selectedDm = dmConversations.find((conversation) => conversation.id === selectedDmId);
   const typingNames = members
     .filter((member) => typingUsers.has(member.id))
     .map((member) => member.username || member.firstName || "Someone");
@@ -446,6 +476,40 @@ export default function ChatPage() {
         message.content.replace(/[\s\u200B-\u200D\uFEFF]/g, "").length > 0 ||
         Boolean(message.attachmentUrl),
     );
+
+  const openDirectMessage = async (member: ServerMember) => {
+    const existing = dmConversations.find((conversation) => conversation.peer.id === member.id);
+    if (existing) {
+      setSelectedDmId(existing.id);
+      return;
+    }
+    try {
+      const conversation = await apiRequest("/api/dms", "POST", { recipientId: member.id });
+      setSelectedDmId(conversation.id);
+      await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't start direct message",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const respondToDmRequest = async (accepted: boolean) => {
+    if (!selectedDm) return;
+    try {
+      await apiRequest(`/api/dms/${selectedDm.id}/request`, "PATCH", { accepted });
+      if (!accepted) setSelectedDmId(null);
+      await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't update message request",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (authLoading || serverLoading) {
     return (
@@ -577,7 +641,10 @@ export default function ChatPage() {
                 <button
                   key={channel.id}
                   type="button"
-                  onClick={() => setSelectedChannelId(channel.id)}
+                  onClick={() => {
+                    setSelectedDmId(null);
+                    setSelectedChannelId(channel.id);
+                  }}
                   className={`flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-left text-sm transition-colors ${
                     activeChannelId === channel.id
                       ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
@@ -611,6 +678,46 @@ export default function ChatPage() {
                 </button>
               ))}
             </div>
+            <div className="mb-2 mt-6 flex items-center justify-between px-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <span>Direct messages</span>
+              <span className="font-normal normal-case tracking-normal">
+                {dmConversations.filter((conversation) => conversation.status === "pending").length || ""}
+              </span>
+            </div>
+            <div className="space-y-1 pb-2">
+              {dmConversations.map((conversation) => {
+                const peerName =
+                  conversation.peer.username || conversation.peer.firstName || "Member";
+                return (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => setSelectedDmId(conversation.id)}
+                    className={`flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-left text-sm transition-colors ${
+                      selectedDmId === conversation.id
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                        : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
+                    }`}
+                  >
+                    <MessageSquare className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{peerName}</span>
+                    {conversation.status === "pending" && conversation.isIncoming && (
+                      <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+                        Request
+                      </span>
+                    )}
+                    {conversation.status === "pending" && !conversation.isIncoming && (
+                      <span className="ml-auto text-[10px]">Pending</span>
+                    )}
+                  </button>
+                );
+              })}
+              {!dmConversations.length && (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  Start a private chat from the member list.
+                </p>
+              )}
+            </div>
           </ScrollArea>
           <div className="border-t border-sidebar-border p-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
@@ -621,7 +728,14 @@ export default function ChatPage() {
         </aside>
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {activeChannel ? (
+          {selectedDm ? (
+            <DirectMessagePanel
+              conversation={selectedDm}
+              currentUserId={user.id}
+              onBack={() => setSelectedDmId(null)}
+              onRespond={(accepted) => void respondToDmRequest(accepted)}
+            />
+          ) : activeChannel ? (
             <>
               <header className="glass-panel flex h-16 shrink-0 items-center gap-3 border-x-0 border-t-0 px-6">
                 <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
@@ -871,6 +985,18 @@ export default function ChatPage() {
                       {member.status === "online" && !member.isBanned ? "Online" : "Offline"}
                     </p>
                   </div>
+                  {!member.isBanned && member.id !== user.id && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => void openDirectMessage(member)}
+                      aria-label={`Message ${member.username || member.firstName || "member"} privately`}
+                      title="Send a private message"
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

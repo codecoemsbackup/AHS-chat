@@ -12,6 +12,9 @@ import {
 } from "./replitAuth";
 import {
   insertServerMessageSchema,
+  insertDmMessageSchema,
+  createDmConversationSchema,
+  respondToDmRequestSchema,
   updateUsernameSchema,
   updateChannelSchema,
   updateAdminSchema,
@@ -310,6 +313,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/dms", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      res.json(await storage.getDmConversations(actor.id));
+    } catch (error) {
+      sendError(res, error, "Failed to fetch direct messages", 500);
+    }
+  });
+
+  app.post("/api/dms", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { recipientId } = createDmConversationSchema.parse(req.body);
+      if (recipientId === actor.id) {
+        return res.status(400).json({ message: "You cannot message yourself" });
+      }
+      const recipient = await storage.getUser(recipientId);
+      if (!recipient || (await storage.isUserBanned(recipientId))) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      const conversation = await storage.createDmConversation(actor.id, recipient.id);
+      for (const participantId of [actor.id, recipient.id]) {
+        ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
+          conversationId: conversation.id,
+        });
+      }
+      res.status(201).json(conversation);
+    } catch (error: any) {
+      sendError(res, error, "Failed to start direct message");
+    }
+  });
+
+  app.patch("/api/dms/:conversationId/request", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { accepted } = respondToDmRequestSchema.parse(req.body);
+      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.requesterId === actor.id || conversation.status !== "pending") {
+        return res.status(403).json({ message: "This message request cannot be changed" });
+      }
+      const updated = await storage.respondToDmRequest(
+        conversation.id,
+        actor.id,
+        accepted,
+      );
+      if (!updated) {
+        return res.status(409).json({ message: "This message request has already been handled" });
+      }
+      for (const participantId of [updated.participantOneId, updated.participantTwoId]) {
+        ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
+          conversationId: updated.id,
+        });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      sendError(res, error, "Failed to respond to message request");
+    }
+  });
+
+  app.get("/api/dms/:conversationId/messages", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.status !== "accepted") {
+        return res.status(403).json({ message: "Accept the message request before reading messages" });
+      }
+      res.json(await storage.getDmMessages(conversation.id));
+    } catch (error) {
+      sendError(res, error, "Failed to fetch direct messages", 500);
+    }
+  });
+
+  app.post("/api/dms/:conversationId/messages", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const parsed = insertDmMessageSchema.parse(req.body);
+      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.status !== "accepted") {
+        return res.status(403).json({ message: "Accept the message request before sending messages" });
+      }
+      if (await storage.isUserBanned(conversation.peer.id)) {
+        return res.status(403).json({ message: "This member cannot receive messages" });
+      }
+      const message = await storage.createDmMessage(conversation.id, actor.id, parsed.content);
+      for (const participantId of [conversation.participantOneId, conversation.participantTwoId]) {
+        ioFor(app)?.to(`user:${participantId}`).emit("dm:message", {
+          conversationId: conversation.id,
+          message,
+        });
+        ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
+          conversationId: conversation.id,
+        });
+      }
+      res.status(201).json(message);
+    } catch (error: any) {
+      sendError(res, error, "Failed to send direct message");
+    }
+  });
+
   app.post("/api/channels", isAuthenticated, async (req: any, res: Response) => {
     try {
       if (!(await adminUser(req, res))) return;
@@ -548,6 +658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       connectedUsers.set(userId, socket.id);
       socket.data.userId = userId;
       socket.join(SERVER_ROOM);
+      socket.join(`user:${userId}`);
       await storage.updateUserStatus(userId, "online");
       io.to(SERVER_ROOM).emit("member:status", { userId, status: "online" });
       socket.emit("connected", { userId });

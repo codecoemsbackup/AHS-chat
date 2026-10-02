@@ -3,6 +3,8 @@ import {
   servers,
   channels,
   serverMessages,
+  dmConversations,
+  dmMessages,
   bannedUsers,
   type User,
   type UpsertUser,
@@ -12,9 +14,12 @@ import {
   type ServerMessageWithRelations,
   type MessageReplyPreview,
   type InsertServerMessage,
+  type DmConversation,
+  type DmConversationWithPeer,
+  type DmMessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 export const MAIN_SERVER_ID = "main";
 export const DEFAULT_CHANNEL_NAME = "general";
@@ -47,6 +52,13 @@ export interface IStorage {
   getChannelMessages(channelId: string, limit?: number): Promise<ServerMessageWithRelations[]>;
   createMessage(message: InsertServerMessage & { senderId: string }): Promise<ServerMessageWithRelations>;
   deleteMessage(messageId: string, deletedBy: string): Promise<void>;
+
+  getDmConversations(userId: string): Promise<DmConversationWithPeer[]>;
+  getDmConversation(conversationId: string, userId: string): Promise<DmConversationWithPeer | undefined>;
+  createDmConversation(requesterId: string, peerId: string): Promise<DmConversationWithPeer>;
+  respondToDmRequest(conversationId: string, userId: string, accepted: boolean): Promise<DmConversation | undefined>;
+  getDmMessages(conversationId: string, limit?: number): Promise<DmMessageWithSender[]>;
+  createDmMessage(conversationId: string, senderId: string, content: string): Promise<DmMessageWithSender>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -311,6 +323,186 @@ export class DatabaseStorage implements IStorage {
       .update(serverMessages)
       .set({ deletedAt: new Date(), deletedBy })
       .where(eq(serverMessages.id, messageId));
+  }
+
+  async getDmConversations(userId: string): Promise<DmConversationWithPeer[]> {
+    const rows = await db
+      .select({ conversation: dmConversations, peer: users })
+      .from(dmConversations)
+      .innerJoin(
+        users,
+        sql`${users.id} = CASE
+          WHEN ${dmConversations.participantOneId} = ${userId}
+          THEN ${dmConversations.participantTwoId}
+          ELSE ${dmConversations.participantOneId}
+        END`,
+      )
+      .where(
+        sql`(${dmConversations.participantOneId} = ${userId}
+          OR ${dmConversations.participantTwoId} = ${userId})
+          AND ${dmConversations.status} <> 'declined'`,
+      )
+      .orderBy(desc(dmConversations.updatedAt));
+    return rows.map(({ conversation, peer }) => ({
+      ...conversation,
+      peer: {
+        id: peer.id,
+        username: peer.username,
+        firstName: peer.firstName,
+        profileImageUrl: peer.profileImageUrl,
+        status: peer.status,
+      },
+      isIncoming: conversation.requesterId !== userId,
+    }));
+  }
+
+  async getDmConversation(
+    conversationId: string,
+    userId: string,
+  ): Promise<DmConversationWithPeer | undefined> {
+    const [row] = await db
+      .select({ conversation: dmConversations, peer: users })
+      .from(dmConversations)
+      .innerJoin(
+        users,
+        sql`${users.id} = CASE
+          WHEN ${dmConversations.participantOneId} = ${userId}
+          THEN ${dmConversations.participantTwoId}
+          ELSE ${dmConversations.participantOneId}
+        END`,
+      )
+      .where(
+        and(
+          eq(dmConversations.id, conversationId),
+          sql`(${dmConversations.participantOneId} = ${userId}
+            OR ${dmConversations.participantTwoId} = ${userId})`,
+        ),
+      );
+    if (!row) return undefined;
+    return {
+      ...row.conversation,
+      peer: {
+        id: row.peer.id,
+        username: row.peer.username,
+        firstName: row.peer.firstName,
+        profileImageUrl: row.peer.profileImageUrl,
+        status: row.peer.status,
+      },
+      isIncoming: row.conversation.requesterId !== userId,
+    };
+  }
+
+  async createDmConversation(requesterId: string, peerId: string): Promise<DmConversationWithPeer> {
+    const [participantOneId, participantTwoId] = [requesterId, peerId].sort();
+    const [existing] = await db
+      .select()
+      .from(dmConversations)
+      .where(
+        and(
+          eq(dmConversations.participantOneId, participantOneId),
+          eq(dmConversations.participantTwoId, participantTwoId),
+        ),
+      );
+
+    let conversation = existing;
+    if (conversation?.status === "declined") {
+      [conversation] = await db
+        .update(dmConversations)
+        .set({ requesterId, status: "pending", updatedAt: new Date() })
+        .where(eq(dmConversations.id, conversation.id))
+        .returning();
+    } else if (!conversation) {
+      const [created] = await db
+        .insert(dmConversations)
+        .values({ participantOneId, participantTwoId, requesterId })
+        .onConflictDoNothing()
+        .returning();
+      conversation = created;
+      if (!conversation) {
+        [conversation] = await db
+          .select()
+          .from(dmConversations)
+          .where(
+            and(
+              eq(dmConversations.participantOneId, participantOneId),
+              eq(dmConversations.participantTwoId, participantTwoId),
+            ),
+          );
+      }
+    }
+
+    if (!conversation) throw new Error("Failed to create direct message conversation");
+    const result = await this.getDmConversation(conversation.id, requesterId);
+    if (!result) throw new Error("Failed to load direct message conversation");
+    return result;
+  }
+
+  async respondToDmRequest(
+    conversationId: string,
+    userId: string,
+    accepted: boolean,
+  ): Promise<DmConversation | undefined> {
+    const [conversation] = await db
+      .update(dmConversations)
+      .set({ status: accepted ? "accepted" : "declined", updatedAt: new Date() })
+      .where(
+        and(
+          eq(dmConversations.id, conversationId),
+          sql`${dmConversations.requesterId} <> ${userId}`,
+          eq(dmConversations.status, "pending"),
+          sql`(${dmConversations.participantOneId} = ${userId}
+            OR ${dmConversations.participantTwoId} = ${userId})`,
+        ),
+      )
+      .returning();
+    return conversation;
+  }
+
+  async getDmMessages(conversationId: string, limit = 100): Promise<DmMessageWithSender[]> {
+    const rows = await db
+      .select({ message: dmMessages, sender: users })
+      .from(dmMessages)
+      .innerJoin(users, eq(users.id, dmMessages.senderId))
+      .where(eq(dmMessages.conversationId, conversationId))
+      .orderBy(desc(dmMessages.createdAt))
+      .limit(limit);
+    return rows.reverse().map(({ message, sender }) => ({
+      ...message,
+      sender: {
+        id: sender.id,
+        username: sender.username,
+        firstName: sender.firstName,
+        profileImageUrl: sender.profileImageUrl,
+      },
+    }));
+  }
+
+  async createDmMessage(
+    conversationId: string,
+    senderId: string,
+    content: string,
+  ): Promise<DmMessageWithSender> {
+    const [message] = await db
+      .insert(dmMessages)
+      .values({ conversationId, senderId, content })
+      .returning();
+    await db
+      .update(dmConversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(dmConversations.id, conversationId));
+    const [sender] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, senderId));
+    return {
+      ...message,
+      sender: {
+        id: sender.id,
+        username: sender.username,
+        firstName: sender.firstName,
+        profileImageUrl: sender.profileImageUrl,
+      },
+    };
   }
 }
 
