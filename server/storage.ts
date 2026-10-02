@@ -190,6 +190,17 @@ export class DatabaseStorage implements IStorage {
       ON dm_messages (conversation_id, created_at)`);
   }
 
+  async ensureUploadsSchema(): Promise<void> {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS uploads (
+      key varchar PRIMARY KEY,
+      mime_type varchar(120) NOT NULL,
+      original_name varchar(120) NOT NULL,
+      size integer NOT NULL,
+      data bytea NOT NULL,
+      created_at timestamp DEFAULT now()
+    )`);
+  }
+
   async getChannels(): Promise<Channel[]> {
     await this.ensureServer();
     return db
