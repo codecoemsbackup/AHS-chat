@@ -49,7 +49,7 @@ interface ServerData {
   members: ServerMember[];
 }
 
-const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements"]);
+const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls"]);
 
 function isAdminOnlyChannel(channelName: string) {
   return ADMIN_ONLY_CHANNELS.has(channelName.trim().toLowerCase());
