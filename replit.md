@@ -88,7 +88,7 @@ Preferred communication style: Simple, everyday language.
 - Channels include a name, description, display position, and timestamps
 
 *Server Messages Table:*
-- Channel message storage with sender relationship
+- Channel message storage with sender metadata
 - Fields: id, channelId, senderId, content, timestamps, and soft-delete metadata
 
 *Banned Users Table:*
