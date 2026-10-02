@@ -9,9 +9,14 @@ import {
   boolean,
   integer,
   uniqueIndex,
+  customType,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
 
 // Session storage table - Required for Replit Auth
 export const sessions = pgTable(
@@ -95,6 +100,15 @@ export const bannedUsers = pgTable("banned_users", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const uploads = pgTable("uploads", {
+  key: varchar("key").primaryKey(),
+  mimeType: varchar("mime_type", { length: 120 }).notNull(),
+  originalName: varchar("original_name", { length: 120 }).notNull(),
+  size: integer("size").notNull(),
+  data: bytea("data").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

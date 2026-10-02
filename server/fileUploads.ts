@@ -1,6 +1,8 @@
-import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { uploads } from "@shared/schema";
+import { db } from "./db";
 
 export const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
 export const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
@@ -67,21 +69,31 @@ export async function saveUpload(
       : `upload.${extension}`;
   const directory = options.kind === "avatar" ? "avatars" : "files";
   const fileName = `${randomUUID()}.${extension}`;
-  const directoryPath = path.join(UPLOAD_ROOT, directory);
-  await mkdir(directoryPath, { recursive: true });
-  await writeFile(path.join(directoryPath, fileName), buffer, { flag: "wx" });
+  const key = `${directory}/${fileName}`;
+  await db.insert(uploads).values({
+    key,
+    mimeType,
+    originalName: safeOriginalName,
+    size: buffer.length,
+    data: buffer,
+  });
 
   return {
-    url: `/uploads/${directory}/${fileName}`,
+    url: `/uploads/${key}`,
     mimeType,
     size: buffer.length,
     originalName: safeOriginalName,
   };
 }
 
-export async function removeLocalUpload(url: string | null | undefined) {
+export async function getUpload(key: string) {
+  const [upload] = await db.select().from(uploads).where(eq(uploads.key, key)).limit(1);
+  return upload;
+}
+
+export async function removeUpload(url: string | null | undefined) {
   if (!url?.startsWith("/uploads/")) return;
-  const filePath = path.resolve(UPLOAD_ROOT, url.slice("/uploads/".length));
-  if (!filePath.startsWith(`${UPLOAD_ROOT}${path.sep}`)) return;
-  await unlink(filePath).catch(() => undefined);
+  const key = url.slice("/uploads/".length);
+  if (!/^(avatars|files)\/[\w-]+\.[a-z0-9]+$/i.test(key)) return;
+  await db.delete(uploads).where(eq(uploads.key, key));
 }

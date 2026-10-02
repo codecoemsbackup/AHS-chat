@@ -24,7 +24,8 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_AVATAR_BYTES,
   UPLOAD_ROOT,
-  removeLocalUpload,
+  getUpload,
+  removeUpload,
   saveUpload,
 } from "./fileUploads";
 
@@ -76,6 +77,21 @@ function sendError(res: Response, error: any, fallback: string, status = 400) {
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
   app.use("/uploads", express.static(UPLOAD_ROOT, { maxAge: "1h" }));
+  app.get("/uploads/:kind/:fileName", async (req, res) => {
+    try {
+      const upload = await getUpload(`${req.params.kind}/${req.params.fileName}`);
+      if (!upload) return res.sendStatus(404);
+      res.set({
+        "Content-Type": upload.mimeType,
+        "Content-Length": String(upload.size),
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+      });
+      res.send(upload.data);
+    } catch (error) {
+      sendError(res, error, "Failed to fetch upload", 500);
+    }
+  });
 
   app.get("/api/auth/username-available", async (req: any, res: Response) => {
     const username = String(req.query.username || "").trim();
@@ -169,7 +185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxBytes: MAX_AVATAR_BYTES,
       });
       const user = await storage.updateProfileImage(actor.id, upload.url);
-      await removeLocalUpload(actor.profileImageUrl);
+      await removeUpload(actor.profileImageUrl);
       ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
       res.json(publicUser(user));
     } catch (error: any) {
