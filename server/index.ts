@@ -49,6 +49,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await storage.ensureDmSchema();
   await storage.ensureServer();
 
   const server = await registerRoutes(app);

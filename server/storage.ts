@@ -163,6 +163,33 @@ export class DatabaseStorage implements IStorage {
     return server;
   }
 
+  async ensureDmSchema(): Promise<void> {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS dm_conversations (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      participant_one_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      participant_two_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      requester_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status varchar NOT NULL DEFAULT 'pending',
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS dm_conversations_participants_unique
+      ON dm_conversations (participant_one_id, participant_two_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS dm_conversations_participant_one_idx
+      ON dm_conversations (participant_one_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS dm_conversations_participant_two_idx
+      ON dm_conversations (participant_two_id)`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS dm_messages (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id varchar NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
+      sender_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content text NOT NULL,
+      created_at timestamp DEFAULT now()
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS dm_messages_conversation_created_idx
+      ON dm_messages (conversation_id, created_at)`);
+  }
+
   async getChannels(): Promise<Channel[]> {
     await this.ensureServer();
     return db
