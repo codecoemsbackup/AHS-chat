@@ -238,7 +238,22 @@ export default function ChatPage() {
     socket.connect();
     socket.emit("user:connect", user.id);
 
+    const playNotificationSound = () => {
+      const audio = dmNotificationAudioRef.current;
+      if (!audio) return;
+      audio.currentTime = 0;
+      void audio.play().catch((error: unknown) => {
+        console.warn("Could not play notification sound", error);
+      });
+    };
+
     const handleMessageReceive = (message: ServerMessageWithRelations) => {
+      if (
+        message.senderId !== user.id &&
+        message.mentionUserIds.includes(user.id)
+      ) {
+        playNotificationSound();
+      }
       if (
         message.senderId !== user.id &&
         message.channelId !== selectedChannelRef.current
@@ -319,13 +334,7 @@ export default function ChatPage() {
       message: DmMessageWithSender;
     }) => {
       if (message.senderId !== user.id) {
-        const audio = dmNotificationAudioRef.current;
-        if (audio) {
-          audio.currentTime = 0;
-          void audio.play().catch((error: unknown) => {
-            console.warn("Could not play DM notification sound", error);
-          });
-        }
+        playNotificationSound();
       }
       if (message.senderId !== user.id && conversationId !== selectedDmRef.current) {
         setDmUnreadCounts((previous) => ({
@@ -379,7 +388,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const audio = new Audio("/dm-notification.mp3");
-    audio.volume = 0.15;
+    audio.volume = 0.25;
     dmNotificationAudioRef.current = audio;
     return () => {
       audio.pause();
