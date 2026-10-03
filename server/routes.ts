@@ -24,6 +24,8 @@ import {
   banUserSchema,
   localSignupSchema,
   localLoginSchema,
+  createPollSchema,
+  voteOnPollSchema,
 } from "@shared/schema";
 import {
   MAX_ATTACHMENT_BYTES,
@@ -720,14 +722,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     isAuthenticated,
     async (req: any, res: Response) => {
       try {
-        if (!(await activeUser(req, res))) return;
+        const actor = await activeUser(req, res);
+        if (!actor) return;
         const channel = await storage.getChannel(req.params.channelId);
         if (!channel || channel.serverId !== "main") {
           return res.status(404).json({ message: "Channel not found" });
         }
-        res.json(await storage.getChannelMessages(channel.id));
+        res.json(await storage.getChannelMessages(channel.id, 100, actor.id));
       } catch (error) {
         sendError(res, error, "Failed to fetch messages", 500);
+      }
+    },
+  );
+
+  app.post(
+    "/api/channels/:channelId/polls",
+    isAuthenticated,
+    async (req: any, res: Response) => {
+      try {
+        const actor = await adminUser(req, res);
+        if (!actor) return;
+        const channel = await storage.getChannel(req.params.channelId);
+        if (
+          !channel ||
+          channel.serverId !== "main" ||
+          channel.name.trim().toLowerCase() !== "polls"
+        ) {
+          return res.status(404).json({ message: "Polls can only be created in the polls channel" });
+        }
+        const parsed = createPollSchema.parse(req.body);
+        const message = await storage.createPoll(channel.id, actor.id, {
+          question: parsed.question,
+          options: parsed.options,
+          allowMultiple: parsed.allowMultiple,
+        });
+        ioFor(app)?.to(SERVER_ROOM).emit("message:receive", message);
+        res.status(201).json(message);
+      } catch (error) {
+        sendError(res, error, "Failed to create poll");
+      }
+    },
+  );
+
+  app.post(
+    "/api/polls/:messageId/votes",
+    isAuthenticated,
+    async (req: any, res: Response) => {
+      try {
+        const actor = await activeUser(req, res);
+        if (!actor) return;
+        const messageId = req.params.messageId;
+        const channel = await storage.getChannelForMessage(messageId);
+        if (
+          !channel ||
+          channel.serverId !== "main" ||
+          channel.name.trim().toLowerCase() !== "polls"
+        ) {
+          return res.status(404).json({ message: "Poll not found" });
+        }
+        const parsed = voteOnPollSchema.parse(req.body);
+        const message = await storage.voteOnPoll(messageId, actor.id, parsed.optionIndexes);
+        ioFor(app)?.to(SERVER_ROOM).emit("poll:updated", {
+          channelId: message.channelId,
+          messageId: message.id,
+          counts: message.pollResults?.counts || [],
+          totalVoters: message.pollResults?.totalVoters || 0,
+        });
+        res.json(message);
+      } catch (error) {
+        sendError(res, error, "Failed to vote on poll");
       }
     },
   );
@@ -792,7 +855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const channel = await storage.getChannel(parsed.channelId);
         if (!channel || channel.serverId !== "main") return;
         const sender = await storage.getUser(userId);
-        const adminOnlyChannel = ["rules", "announcements"].includes(
+        const adminOnlyChannel = ["rules", "announcements", "polls"].includes(
           channel.name.trim().toLowerCase(),
         );
         if (!sender || (adminOnlyChannel && !sender.isAdmin)) {

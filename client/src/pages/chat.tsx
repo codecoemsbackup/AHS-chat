@@ -40,6 +40,8 @@ import MessageInput, {
   type GifResult,
   type MentionMember,
 } from "@/components/MessageInput";
+import PollCard from "@/components/PollCard";
+import PollCreateDialog from "@/components/PollCreateDialog";
 import UserAvatar from "@/components/UserAvatar";
 import AvatarCropDialog from "@/components/AvatarCropDialog";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -98,6 +100,8 @@ export default function ChatPage() {
   const [dndSaving, setDndSaving] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [pollCreateOpen, setPollCreateOpen] = useState(false);
+  const [pollCreating, setPollCreating] = useState(false);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [avatarCropOpen, setAvatarCropOpen] = useState(false);
   const [avatarCropSource, setAvatarCropSource] = useState<string | null>(null);
@@ -145,6 +149,8 @@ export default function ChatPage() {
   const viewedChannelId = selectedDmId ? null : activeChannelId;
   const activeChannel = channels.find((channel) => channel.id === activeChannelId);
   const adminOnlyChannel = !!activeChannel && isAdminOnlyChannel(activeChannel.name);
+  const pollsChannel =
+    !!activeChannel && activeChannel.name.trim().toLowerCase() === "polls";
   const canSendMessages = !!user && (!adminOnlyChannel || user.isAdmin);
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<ServerMessageWithRelations[]>({
@@ -306,6 +312,27 @@ export default function ChatPage() {
         (old = []) => old.filter((message) => message.id !== messageId),
       );
     };
+    const handlePollUpdated = ({
+      channelId,
+      messageId,
+      counts,
+      totalVoters,
+    }: {
+      channelId: string;
+      messageId: string;
+      counts: number[];
+      totalVoters: number;
+    }) => {
+      queryClient.setQueryData<ServerMessageWithRelations[]>(
+        [`/api/channels/${channelId}/messages`],
+        (old = []) =>
+          old.map((message) =>
+            message.id === messageId && message.pollResults
+              ? { ...message, pollResults: { ...message.pollResults, counts, totalVoters } }
+              : message,
+          ),
+      );
+    };
     const handleTyping = ({
       userId,
       channelId,
@@ -379,6 +406,7 @@ export default function ChatPage() {
 
     socket.on("message:receive", handleMessageReceive);
     socket.on("message:deleted", handleMessageDeleted);
+    socket.on("poll:updated", handlePollUpdated);
     socket.on("message:error", handleMessageError);
     socket.on("dm:message", handleDmMessage);
     socket.on("dm:updated", handleDmUpdated);
@@ -393,6 +421,7 @@ export default function ChatPage() {
     return () => {
       socket.off("message:receive", handleMessageReceive);
       socket.off("message:deleted", handleMessageDeleted);
+      socket.off("poll:updated", handlePollUpdated);
       socket.off("message:error", handleMessageError);
       socket.off("dm:message", handleDmMessage);
       socket.off("dm:updated", handleDmUpdated);
@@ -437,6 +466,59 @@ export default function ChatPage() {
       });
     },
   });
+
+  const createPoll = async (poll: {
+    question: string;
+    options: string[];
+    allowMultiple: boolean;
+  }) => {
+    if (!activeChannelId) return;
+    setPollCreating(true);
+    try {
+      const message: ServerMessageWithRelations = await apiRequest(
+        `/api/channels/${activeChannelId}/polls`,
+        "POST",
+        poll,
+      );
+      queryClient.setQueryData<ServerMessageWithRelations[]>(
+        [`/api/channels/${activeChannelId}/messages`],
+        (old = []) => old.some((item) => item.id === message.id)
+          ? old.map((item) => item.id === message.id ? message : item)
+          : [...old, message],
+      );
+      setPollCreateOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Couldn't create poll",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setPollCreating(false);
+    }
+  };
+
+  const voteOnPoll = async (messageId: string, optionIndexes: number[]) => {
+    try {
+      const message: ServerMessageWithRelations = await apiRequest(
+        `/api/polls/${messageId}/votes`,
+        "POST",
+        { optionIndexes },
+      );
+      queryClient.setQueryData<ServerMessageWithRelations[]>(
+        [`/api/channels/${message.channelId}/messages`],
+        (old = []) => old.map((item) => item.id === message.id ? message : item),
+      );
+      return message;
+    } catch (error: any) {
+      toast({
+        title: "Couldn't submit vote",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+      return undefined;
+    }
+  };
 
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -721,6 +803,12 @@ export default function ChatPage() {
         channels={channels}
         members={members}
         actor={members.find((member) => member.id === user.id) || user}
+      />
+      <PollCreateDialog
+        open={pollCreateOpen}
+        isSaving={pollCreating}
+        onOpenChange={setPollCreateOpen}
+        onCreate={(poll) => void createPoll(poll)}
       />
       <Dialog
         open={statusDialogOpen}
@@ -1119,7 +1207,32 @@ export default function ChatPage() {
                               <span className="h-px flex-1 bg-border" />
                             </div>
                           )}
-                        <ChatBubble
+                        {message.pollData && message.pollResults ? (
+                          <PollCard
+                            poll={message.pollData}
+                            results={message.pollResults}
+                            senderName={senderName}
+                            timestamp={
+                              message.createdAt
+                                ? new Date(message.createdAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                : "Now"
+                            }
+                            canDelete={user.isAdmin}
+                            onDelete={() => deleteMessageMutation.mutate(message.id)}
+                            onReply={() =>
+                              setReplyingTo({
+                                id: message.id,
+                                content: message.content,
+                                senderId: message.senderId,
+                                senderName,
+                              })
+                            }
+                            onVote={(optionIndexes) => voteOnPoll(message.id, optionIndexes)}
+                          />
+                        ) : <ChatBubble
                           message={message.content}
                           timestamp={
                             message.createdAt
@@ -1153,7 +1266,7 @@ export default function ChatPage() {
                           }
                           canDelete={user.isAdmin}
                           onDelete={() => deleteMessageMutation.mutate(message.id)}
-                        />
+                        />}
                         </div>
                       );
                     })
@@ -1172,6 +1285,7 @@ export default function ChatPage() {
                     placeholder={`Message #${activeChannel.name}`}
                     onSendMessage={handleSendMessage}
                     onSendGif={handleSendGif}
+                    onCreatePoll={pollsChannel && user.isAdmin ? () => setPollCreateOpen(true) : undefined}
                     isUploading={attachmentUploading}
                     mentionableMembers={mentionableMembers}
                     canUseEveryoneMention={user.isAdmin}

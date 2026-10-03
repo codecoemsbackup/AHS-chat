@@ -82,6 +82,7 @@ export const serverMessages = pgTable("server_messages", {
     .references(() => users.id, { onDelete: "cascade" }),
   replyToId: varchar("reply_to_id"),
   content: text("content").notNull(),
+  pollData: jsonb("poll_data").$type<PollDefinition | null>(),
   mentionUserIds: jsonb("mention_user_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   attachmentUrl: varchar("attachment_url"),
   attachmentName: varchar("attachment_name"),
@@ -91,6 +92,29 @@ export const serverMessages = pgTable("server_messages", {
   deletedAt: timestamp("deleted_at"),
   deletedBy: varchar("deleted_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+export const pollVotes = pgTable(
+  "poll_votes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    messageId: varchar("message_id")
+      .notNull()
+      .references(() => serverMessages.id, { onDelete: "cascade" }),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    optionIndex: integer("option_index").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("poll_votes_message_user_option_unique").on(
+      table.messageId,
+      table.userId,
+      table.optionIndex,
+    ),
+    index("poll_votes_message_idx").on(table.messageId),
+  ],
+);
 
 export const dmConversations = pgTable(
   "dm_conversations",
@@ -256,6 +280,33 @@ export const localLoginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+export const createPollSchema = z.object({
+  question: z.string().trim().min(1).max(200),
+  options: z.array(z.string().trim().min(1).max(80)).min(2).max(10),
+  allowMultiple: z.boolean(),
+}).superRefine(({ options }, context) => {
+  const uniqueOptions = new Set(options.map((option) => option.toLowerCase()));
+  if (uniqueOptions.size !== options.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Poll options must be unique",
+      path: ["options"],
+    });
+  }
+});
+
+export const voteOnPollSchema = z.object({
+  optionIndexes: z.array(z.number().int().min(0)).min(1).max(10),
+}).superRefine(({ optionIndexes }, context) => {
+  if (new Set(optionIndexes).size !== optionIndexes.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Poll options cannot be selected more than once",
+      path: ["optionIndexes"],
+    });
+  }
+});
+
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Server = typeof servers.$inferSelect;
@@ -271,6 +322,17 @@ export type MessageReplyPreview = {
 };
 export type ServerMessageWithRelations = ServerMessage & {
   reply?: MessageReplyPreview;
+  pollResults?: PollResults;
+};
+export type PollDefinition = {
+  question: string;
+  options: string[];
+  allowMultiple: boolean;
+};
+export type PollResults = {
+  counts: number[];
+  totalVoters: number;
+  userOptionIndexes: number[];
 };
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;

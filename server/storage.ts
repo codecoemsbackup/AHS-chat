@@ -3,6 +3,7 @@ import {
   servers,
   channels,
   serverMessages,
+  pollVotes,
   dmConversations,
   dmMessages,
   bannedUsers,
@@ -14,12 +15,14 @@ import {
   type ServerMessageWithRelations,
   type MessageReplyPreview,
   type InsertServerMessage,
+  type PollDefinition,
+  type PollResults,
   type DmConversation,
   type DmConversationWithPeer,
   type DmMessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 export const MAIN_SERVER_ID = "main";
 export const DEFAULT_CHANNEL_NAME = "general";
@@ -40,6 +43,7 @@ export interface IStorage {
   ensureServer(): Promise<Server>;
   getChannels(): Promise<Channel[]>;
   getChannel(channelId: string): Promise<Channel | undefined>;
+  getChannelForMessage(messageId: string): Promise<Channel | undefined>;
   createChannel(name: string, description?: string): Promise<Channel>;
   updateChannel(channelId: string, name: string, description?: string): Promise<Channel>;
   deleteChannel(channelId: string): Promise<void>;
@@ -51,7 +55,9 @@ export interface IStorage {
   unbanUser(userId: string): Promise<void>;
   isUserBanned(userId: string): Promise<boolean>;
 
-  getChannelMessages(channelId: string, limit?: number): Promise<ServerMessageWithRelations[]>;
+  getChannelMessages(channelId: string, limit?: number, userId?: string): Promise<ServerMessageWithRelations[]>;
+  createPoll(channelId: string, senderId: string, pollData: PollDefinition): Promise<ServerMessageWithRelations>;
+  voteOnPoll(messageId: string, userId: string, optionIndexes: number[]): Promise<ServerMessageWithRelations>;
   createMessage(message: InsertServerMessage & { senderId: string }): Promise<ServerMessageWithRelations>;
   deleteMessage(messageId: string, deletedBy: string): Promise<void>;
 
@@ -229,6 +235,19 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS do_not_disturb boolean NOT NULL DEFAULT false`);
   }
 
+  async ensurePollsSchema(): Promise<void> {
+    await db.execute(sql`ALTER TABLE server_messages ADD COLUMN IF NOT EXISTS poll_data jsonb`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS poll_votes (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      message_id varchar NOT NULL REFERENCES server_messages(id) ON DELETE CASCADE,
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      option_index integer NOT NULL,
+      created_at timestamp DEFAULT now(),
+      CONSTRAINT poll_votes_message_user_option_unique UNIQUE (message_id, user_id, option_index)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS poll_votes_message_idx ON poll_votes (message_id)`);
+  }
+
   async getChannels(): Promise<Channel[]> {
     await this.ensureServer();
     return db
@@ -241,6 +260,15 @@ export class DatabaseStorage implements IStorage {
   async getChannel(channelId: string): Promise<Channel | undefined> {
     const [channel] = await db.select().from(channels).where(eq(channels.id, channelId));
     return channel;
+  }
+
+  async getChannelForMessage(messageId: string): Promise<Channel | undefined> {
+    const [channel] = await db
+      .select({ channel: channels })
+      .from(serverMessages)
+      .innerJoin(channels, eq(channels.id, serverMessages.channelId))
+      .where(eq(serverMessages.id, messageId));
+    return channel?.channel;
   }
 
   async createChannel(name: string, description?: string): Promise<Channel> {
@@ -333,7 +361,11 @@ export class DatabaseStorage implements IStorage {
     return !!ban;
   }
 
-  async getChannelMessages(channelId: string, limit = 100): Promise<ServerMessageWithRelations[]> {
+  async getChannelMessages(
+    channelId: string,
+    limit = 100,
+    userId?: string,
+  ): Promise<ServerMessageWithRelations[]> {
     const messages = await db
       .select()
       .from(serverMessages)
@@ -354,7 +386,109 @@ export class DatabaseStorage implements IStorage {
           Boolean(message.attachmentUrl),
       )
       .reverse();
-    return Promise.all(visibleMessages.map((message) => this.withReplyPreview(message)));
+    const pollMessageIds = visibleMessages
+      .filter((message) => message.pollData)
+      .map((message) => message.id);
+    const votes = pollMessageIds.length
+      ? await db.select().from(pollVotes).where(inArray(pollVotes.messageId, pollMessageIds))
+      : [];
+    const votesByMessage = new Map<string, typeof votes>();
+    for (const vote of votes) {
+      const current = votesByMessage.get(vote.messageId) || [];
+      current.push(vote);
+      votesByMessage.set(vote.messageId, current);
+    }
+    return Promise.all(
+      visibleMessages.map(async (message) => {
+        const withReply = await this.withReplyPreview(message);
+        if (!message.pollData) return withReply;
+        return {
+          ...withReply,
+          pollResults: this.buildPollResults(
+            message.pollData,
+            votesByMessage.get(message.id) || [],
+            userId,
+          ),
+        };
+      }),
+    );
+  }
+
+  async createPoll(
+    channelId: string,
+    senderId: string,
+    pollData: PollDefinition,
+  ): Promise<ServerMessageWithRelations> {
+    const [message] = await db
+      .insert(serverMessages)
+      .values({
+        channelId,
+        senderId,
+        content: pollData.question,
+        pollData,
+      })
+      .returning();
+    return this.getPollMessage(message, senderId);
+  }
+
+  async voteOnPoll(
+    messageId: string,
+    userId: string,
+    optionIndexes: number[],
+  ): Promise<ServerMessageWithRelations> {
+    const [message] = await db
+      .select()
+      .from(serverMessages)
+      .where(and(eq(serverMessages.id, messageId), isNull(serverMessages.deletedAt)));
+    if (!message?.pollData) throw new Error("Poll not found");
+    if (optionIndexes.some((index) => index >= message.pollData!.options.length)) {
+      throw new Error("Selected poll option does not exist");
+    }
+    if (!message.pollData.allowMultiple && optionIndexes.length !== 1) {
+      throw new Error("Choose exactly one option for this poll");
+    }
+
+    await db.transaction(async (transaction) => {
+      await transaction
+        .delete(pollVotes)
+        .where(and(eq(pollVotes.messageId, messageId), eq(pollVotes.userId, userId)));
+      await transaction.insert(pollVotes).values(
+        optionIndexes.map((optionIndex) => ({ messageId, userId, optionIndex })),
+      );
+    });
+    return this.getPollMessage(message, userId);
+  }
+
+  private async getPollMessage(
+    message: ServerMessage,
+    userId?: string,
+  ): Promise<ServerMessageWithRelations> {
+    const [withReply, votes] = await Promise.all([
+      this.withReplyPreview(message),
+      db.select().from(pollVotes).where(eq(pollVotes.messageId, message.id)),
+    ]);
+    if (!message.pollData) return withReply;
+    return {
+      ...withReply,
+      pollResults: this.buildPollResults(message.pollData, votes, userId),
+    };
+  }
+
+  private buildPollResults(
+    pollData: PollDefinition,
+    votes: Array<{ userId: string; optionIndex: number }>,
+    userId?: string,
+  ): PollResults {
+    const counts = pollData.options.map(() => 0);
+    const userOptionIndexes: number[] = [];
+    const voters = new Set<string>();
+    for (const vote of votes) {
+      if (vote.optionIndex < 0 || vote.optionIndex >= counts.length) continue;
+      counts[vote.optionIndex] += 1;
+      voters.add(vote.userId);
+      if (vote.userId === userId) userOptionIndexes.push(vote.optionIndex);
+    }
+    return { counts, totalVoters: voters.size, userOptionIndexes };
   }
 
   async createMessage(

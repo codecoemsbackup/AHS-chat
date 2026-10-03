@@ -11,6 +11,7 @@ import {
   Reply,
   Search,
   Send,
+  Vote,
   X,
 } from "lucide-react";
 import {
@@ -62,6 +63,7 @@ interface MessageInputProps {
     replyToId?: string,
     mentionUserIds?: string[],
   ) => void | Promise<void>;
+  onCreatePoll?: () => void;
 }
 
 export default function MessageInput({
@@ -74,6 +76,7 @@ export default function MessageInput({
   replyTo,
   onCancelReply,
   onSendGif,
+  onCreatePoll,
 }: MessageInputProps) {
   const [message, setMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -286,6 +289,19 @@ export default function MessageInput({
             data-testid="button-gif-picker"
           >
             <Film className="h-4 w-4" />
+          </Button>
+        )}
+        {onCreatePoll && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={onCreatePoll}
+            disabled={isUploading}
+            aria-label="Create a poll"
+            data-testid="button-create-poll"
+          >
+            <Vote className="h-4 w-4" />
           </Button>
         )}
         <Textarea
