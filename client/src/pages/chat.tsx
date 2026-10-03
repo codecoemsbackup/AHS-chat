@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Megaphone,
   LockKeyhole,
+  Vote,
   LogOut,
   MessageSquare,
   Search,
@@ -85,6 +86,10 @@ function isAnnouncementsChannel(channelName: string) {
   return channelName.trim().toLowerCase() === "announcements";
 }
 
+function isPollsChannel(channelName: string) {
+  return channelName.trim().toLowerCase() === "polls";
+}
+
 export default function ChatPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -135,7 +140,8 @@ export default function ChatPage() {
     const displayOrder = new Map([
       ["rules", 0],
       ["announcements", 1],
-      ["general", 2],
+      ["polls", 2],
+      ["general", 3],
     ]);
     return [...channels].sort((a, b) => {
       const aOrder = displayOrder.get(a.name.trim().toLowerCase()) ?? 3;
@@ -1000,6 +1006,8 @@ export default function ChatPage() {
                       <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
                     ) : isAnnouncementsChannel(channel.name) ? (
                       <Megaphone className="h-4 w-4" aria-hidden="true" />
+                    ) : isPollsChannel(channel.name) ? (
+                      <Vote className="h-4 w-4" aria-hidden="true" />
                     ) : (
                       <Hash className="h-4 w-4" />
                     )}
@@ -1110,6 +1118,8 @@ export default function ChatPage() {
                     />
                   ) : isAnnouncementsChannel(activeChannel.name) ? (
                     <Megaphone className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                  ) : isPollsChannel(activeChannel.name) ? (
+                    <Vote className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   ) : (
                     <Hash className="h-5 w-5 text-muted-foreground" />
                   )}
