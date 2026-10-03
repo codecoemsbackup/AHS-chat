@@ -79,11 +79,10 @@ function sendError(res: Response, error: any, fallback: string, status = 400) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
-  app.use("/uploads", express.static(UPLOAD_ROOT, { maxAge: "1h" }));
-  app.get("/uploads/:kind/:fileName", async (req, res) => {
+  app.get("/uploads/:kind/:fileName", async (req, res, next) => {
     try {
       const upload = await getUpload(`${req.params.kind}/${req.params.fileName}`);
-      if (!upload) return res.sendStatus(404);
+      if (!upload) return next();
       res.set({
         "Content-Type": upload.mimeType,
         "Content-Length": String(upload.size),
@@ -95,6 +94,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sendError(res, error, "Failed to fetch upload", 500);
     }
   });
+  app.use("/uploads", express.static(UPLOAD_ROOT, { maxAge: "1h" }));
 
   app.get("/api/auth/username-available", async (req: any, res: Response) => {
     const username = String(req.query.username || "").trim();
