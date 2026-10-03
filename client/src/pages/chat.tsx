@@ -88,8 +88,11 @@ export default function ChatPage() {
   const [membersOpen, setMembersOpen] = useState(true);
   const [replyingTo, setReplyingTo] = useState<MessageReplyPreview | null>(null);
   const [channelUnread, setChannelUnread] = useState<Record<string, ChannelUnread>>({});
+  const [dmUnreadCounts, setDmUnreadCounts] = useState<Record<string, number>>({});
+  const [dmUnreadLoadedUserId, setDmUnreadLoadedUserId] = useState<string | null>(null);
   const unreadLoadedForUser = useRef<string | null>(null);
   const selectedChannelRef = useRef<string | null>(null);
+  const selectedDmRef = useRef<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -141,6 +144,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     selectedChannelRef.current = viewedChannelId;
+    selectedDmRef.current = selectedDmId;
     setTypingUsers(new Set());
     setReplyingTo(null);
     if (viewedChannelId) {
@@ -151,7 +155,7 @@ export default function ChatPage() {
         return next;
       });
     }
-  }, [viewedChannelId]);
+  }, [selectedDmId, viewedChannelId]);
 
   useEffect(() => {
     unreadLoadedForUser.current = null;
@@ -188,6 +192,44 @@ export default function ChatPage() {
     if (!user?.id || unreadLoadedForUser.current !== user.id) return;
     localStorage.setItem(`ahs-chat-channel-unread:${user.id}`, JSON.stringify(channelUnread));
   }, [channelUnread, user?.id]);
+
+  useEffect(() => {
+    if (!selectedDmId) return;
+    setDmUnreadCounts((previous) => {
+      if (!previous[selectedDmId]) return previous;
+      const next = { ...previous };
+      delete next[selectedDmId];
+      return next;
+    });
+  }, [selectedDmId]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setDmUnreadCounts({});
+      setDmUnreadLoadedUserId(null);
+      return;
+    }
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(`ahs-chat-dm-unread:${user.id}`) || "{}",
+      ) as Record<string, unknown>;
+      const restored: Record<string, number> = {};
+      for (const [conversationId, count] of Object.entries(saved)) {
+        if (conversationId !== selectedDmId && typeof count === "number" && count > 0) {
+          restored[conversationId] = Math.floor(count);
+        }
+      }
+      setDmUnreadCounts(restored);
+    } catch {
+      setDmUnreadCounts({});
+    }
+    setDmUnreadLoadedUserId(user.id);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || dmUnreadLoadedUserId !== user.id) return;
+    localStorage.setItem(`ahs-chat-dm-unread:${user.id}`, JSON.stringify(dmUnreadCounts));
+  }, [dmUnreadCounts, dmUnreadLoadedUserId, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -275,6 +317,15 @@ export default function ChatPage() {
       conversationId: string;
       message: DmMessageWithSender;
     }) => {
+      if (
+        message.senderId !== user.id &&
+        conversationId !== selectedDmRef.current
+      ) {
+        setDmUnreadCounts((previous) => ({
+          ...previous,
+          [conversationId]: (previous[conversationId] || 0) + 1,
+        }));
+      }
       queryClient.setQueryData<DmMessageWithSender[]>(
         [`/api/dms/${conversationId}/messages`],
         (old = []) => (old.some((item) => item.id === message.id) ? old : [...old, message]),
@@ -735,8 +786,20 @@ export default function ChatPage() {
                         : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                     }`}
                   >
-                    <MessageSquare className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{peerName}</span>
+                      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                        <MessageSquare className="h-4 w-4" />
+                        {(dmUnreadCounts[conversation.id] || 0) > 0 && (
+                          <span
+                            className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                            aria-label={`${dmUnreadCounts[conversation.id]} unread message${dmUnreadCounts[conversation.id] === 1 ? "" : "s"}`}
+                          >
+                            {dmUnreadCounts[conversation.id] > 99
+                              ? "99+"
+                              : dmUnreadCounts[conversation.id]}
+                          </span>
+                        )}
+                      </span>
+                      <span className="truncate">{peerName}</span>
                     {conversation.status === "pending" && conversation.isIncoming && (
                       <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
                         Request
