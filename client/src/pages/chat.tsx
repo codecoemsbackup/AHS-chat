@@ -645,7 +645,8 @@ export default function ChatPage() {
   const saveCustomStatus = async (customStatus: string) => {
     setStatusSaving(true);
     try {
-      const updatedUser = await apiRequest("/api/profile/status", "PATCH", { customStatus });
+      const response = await apiRequest("/api/profile/status", "PATCH", { customStatus });
+      const updatedUser: User = await response.json();
       queryClient.setQueryData(["/api/auth/user"], updatedUser);
       void queryClient.invalidateQueries({ queryKey: ["/api/server"] });
       setStatusDraft(updatedUser.customStatus || "");
@@ -667,7 +668,8 @@ export default function ChatPage() {
     doNotDisturbRef.current = enabled;
     setDndSaving(true);
     try {
-      const updatedUser = await apiRequest("/api/profile/do-not-disturb", "PATCH", { enabled });
+      const response = await apiRequest("/api/profile/do-not-disturb", "PATCH", { enabled });
+      const updatedUser: User = await response.json();
       queryClient.setQueryData(["/api/auth/user"], updatedUser);
       void queryClient.invalidateQueries({ queryKey: ["/api/server"] });
     } catch (error: any) {
