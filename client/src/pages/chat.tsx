@@ -14,6 +14,8 @@ import {
   Wifi,
   Camera,
   Pencil,
+  Bell,
+  BellOff,
   X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -92,6 +94,7 @@ export default function ChatPage() {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusDraft, setStatusDraft] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
+  const [doNotDisturb, setDoNotDisturb] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -109,6 +112,8 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const dmNotificationAudioRef = useRef<HTMLAudioElement | null>(null);
+  const doNotDisturbRef = useRef(false);
+  const dndLoadedForUser = useRef<string | null>(null);
 
   const { data: serverData, isLoading: serverLoading } = useQuery<ServerData>({
     queryKey: ["/api/server"],
@@ -245,12 +250,31 @@ export default function ChatPage() {
   }, [dmUnreadCounts, dmUnreadLoadedUserId, user?.id]);
 
   useEffect(() => {
+    dndLoadedForUser.current = null;
+    if (!user?.id) {
+      doNotDisturbRef.current = false;
+      setDoNotDisturb(false);
+      return;
+    }
+    const enabled = localStorage.getItem(`ahs-chat-dnd:${user.id}`) === "true";
+    doNotDisturbRef.current = enabled;
+    setDoNotDisturb(enabled);
+    dndLoadedForUser.current = user.id;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || dndLoadedForUser.current !== user.id) return;
+    localStorage.setItem(`ahs-chat-dnd:${user.id}`, String(doNotDisturb));
+  }, [doNotDisturb, user?.id]);
+
+  useEffect(() => {
     if (!user?.id) return;
     const socket = getSocket();
     socket.connect();
     socket.emit("user:connect", user.id);
 
     const playNotificationSound = () => {
+      if (doNotDisturbRef.current) return;
       const audio = dmNotificationAudioRef.current;
       if (!audio) return;
       audio.currentTime = 0;
@@ -649,6 +673,14 @@ export default function ChatPage() {
     }
   };
 
+  const toggleDoNotDisturb = () => {
+    setDoNotDisturb((enabled) => {
+      const next = !enabled;
+      doNotDisturbRef.current = next;
+      return next;
+    });
+  };
+
   if (authLoading || serverLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -817,6 +849,21 @@ export default function ChatPage() {
                 }`}
               />
               <span>{currentStatus === "online" ? "Online" : "Offline"}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={`ml-auto h-7 gap-1.5 px-2 text-[11px] ${
+                  doNotDisturb ? "text-destructive hover:text-destructive" : ""
+                }`}
+                onClick={toggleDoNotDisturb}
+                aria-pressed={doNotDisturb}
+                aria-label={doNotDisturb ? "Turn off Do Not Disturb" : "Turn on Do Not Disturb"}
+                title={doNotDisturb ? "Do Not Disturb is on" : "Turn on Do Not Disturb"}
+              >
+                {doNotDisturb ? <BellOff className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+                Do not disturb
+              </Button>
             </div>
           </div>
 
