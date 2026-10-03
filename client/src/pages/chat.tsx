@@ -55,6 +55,11 @@ interface ServerData {
 
 const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls"]);
 
+interface ChannelUnread {
+  messageCount: number;
+  mentionCount: number;
+}
+
 function isAdminOnlyChannel(channelName: string) {
   return ADMIN_ONLY_CHANNELS.has(channelName.trim().toLowerCase());
 }
@@ -82,9 +87,8 @@ export default function ChatPage() {
   const [avatarCropSource, setAvatarCropSource] = useState<string | null>(null);
   const [membersOpen, setMembersOpen] = useState(true);
   const [replyingTo, setReplyingTo] = useState<MessageReplyPreview | null>(null);
-  const [unreadMentionChannelIds, setUnreadMentionChannelIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [channelUnread, setChannelUnread] = useState<Record<string, ChannelUnread>>({});
+  const unreadLoadedForUser = useRef<string | null>(null);
   const selectedChannelRef = useRef<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -117,6 +121,7 @@ export default function ChatPage() {
   const defaultChannel =
     channels.find((channel) => channel.name.trim().toLowerCase() === "general") || channels[0];
   const activeChannelId = selectedChannelId || defaultChannel?.id || null;
+  const viewedChannelId = selectedDmId ? null : activeChannelId;
   const activeChannel = channels.find((channel) => channel.id === activeChannelId);
   const adminOnlyChannel = !!activeChannel && isAdminOnlyChannel(activeChannel.name);
   const canSendMessages = !!user && (!adminOnlyChannel || user.isAdmin);
@@ -135,34 +140,54 @@ export default function ChatPage() {
   }, [channels, defaultChannel?.id, selectedChannelId]);
 
   useEffect(() => {
-    selectedChannelRef.current = activeChannelId;
+    selectedChannelRef.current = viewedChannelId;
     setTypingUsers(new Set());
     setReplyingTo(null);
-    if (activeChannelId) {
-      setUnreadMentionChannelIds((previous) => {
-        if (!previous.has(activeChannelId)) return previous;
-        const next = new Set(previous);
-        next.delete(activeChannelId);
+    if (viewedChannelId) {
+      setChannelUnread((previous) => {
+        if (!previous[viewedChannelId]) return previous;
+        const next = { ...previous };
+        delete next[viewedChannelId];
         return next;
       });
     }
-  }, [activeChannelId]);
+  }, [viewedChannelId]);
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("ahs-chat-unread-mentions") || "[]");
-      if (Array.isArray(saved)) setUnreadMentionChannelIds(new Set(saved.filter((id) => typeof id === "string")));
-    } catch {
-      setUnreadMentionChannelIds(new Set());
+    unreadLoadedForUser.current = null;
+    if (!user?.id) {
+      setChannelUnread({});
+      return;
     }
+
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(`ahs-chat-channel-unread:${user.id}`) || "{}",
+      ) as Record<string, Partial<ChannelUnread>>;
+      const restored: Record<string, ChannelUnread> = {};
+      for (const [channelId, counts] of Object.entries(saved)) {
+        if (channelId === viewedChannelId) continue;
+        if (
+          typeof counts?.messageCount === "number" &&
+          typeof counts?.mentionCount === "number"
+        ) {
+          restored[channelId] = {
+            messageCount: Math.max(0, Math.floor(counts.messageCount)),
+            mentionCount: Math.max(0, Math.floor(counts.mentionCount)),
+          };
+        }
+      }
+      setChannelUnread(restored);
+    } catch {
+      setChannelUnread({});
+    }
+    unreadLoadedForUser.current = user.id;
   }, [user?.id]);
 
   useEffect(() => {
-    localStorage.setItem(
-      "ahs-chat-unread-mentions",
-      JSON.stringify(Array.from(unreadMentionChannelIds)),
-    );
-  }, [unreadMentionChannelIds]);
+    if (!user?.id || unreadLoadedForUser.current !== user.id) return;
+    localStorage.setItem(`ahs-chat-channel-unread:${user.id}`, JSON.stringify(channelUnread));
+  }, [channelUnread, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -172,10 +197,20 @@ export default function ChatPage() {
 
     const handleMessageReceive = (message: ServerMessageWithRelations) => {
       if (
-        message.mentionUserIds.includes(user.id) &&
+        message.senderId !== user.id &&
         message.channelId !== selectedChannelRef.current
       ) {
-        setUnreadMentionChannelIds((previous) => new Set(previous).add(message.channelId));
+        const wasMentioned = message.mentionUserIds.includes(user.id);
+        setChannelUnread((previous) => {
+          const current = previous[message.channelId] || { messageCount: 0, mentionCount: 0 };
+          return {
+            ...previous,
+            [message.channelId]: {
+              messageCount: current.messageCount + 1,
+              mentionCount: current.mentionCount + (wasMentioned ? 1 : 0),
+            },
+          };
+        });
       }
       if (message.channelId !== selectedChannelRef.current) return;
       queryClient.setQueryData<ServerMessageWithRelations[]>(
@@ -188,10 +223,6 @@ export default function ChatPage() {
         [`/api/channels/${selectedChannelRef.current}/messages`],
         (old = []) => old.filter((message) => message.id !== messageId),
       );
-    };
-    const handleMentionReceived = ({ channelId }: { channelId: string }) => {
-      if (channelId === selectedChannelRef.current) return;
-      setUnreadMentionChannelIds((previous) => new Set(previous).add(channelId));
     };
     const handleTyping = ({
       userId,
@@ -256,7 +287,6 @@ export default function ChatPage() {
 
     socket.on("message:receive", handleMessageReceive);
     socket.on("message:deleted", handleMessageDeleted);
-    socket.on("mention:received", handleMentionReceived);
     socket.on("message:error", handleMessageError);
     socket.on("dm:message", handleDmMessage);
     socket.on("dm:updated", handleDmUpdated);
@@ -271,7 +301,6 @@ export default function ChatPage() {
     return () => {
       socket.off("message:receive", handleMessageReceive);
       socket.off("message:deleted", handleMessageDeleted);
-      socket.off("mention:received", handleMentionReceived);
       socket.off("message:error", handleMessageError);
       socket.off("dm:message", handleDmMessage);
       socket.off("dm:updated", handleDmUpdated);
@@ -665,16 +694,23 @@ export default function ChatPage() {
                         aria-label="Admins only"
                       />
                     )}
+                    {(channelUnread[channel.id]?.mentionCount || 0) > 0 ? (
+                      <span
+                        className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                        aria-label={`${channelUnread[channel.id].mentionCount} unread mention${channelUnread[channel.id].mentionCount === 1 ? "" : "s"}`}
+                      >
+                        {channelUnread[channel.id].mentionCount > 99
+                          ? "99+"
+                          : channelUnread[channel.id].mentionCount}
+                      </span>
+                    ) : (channelUnread[channel.id]?.messageCount || 0) > 0 ? (
+                      <span
+                        className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-white"
+                        aria-label="Unread messages"
+                      />
+                    ) : null}
                   </span>
                   <span className="truncate">{channel.name}</span>
-                  {unreadMentionChannelIds.has(channel.id) && (
-                    <span
-                      className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground"
-                      aria-label="You were mentioned in this channel"
-                    >
-                      1
-                    </span>
-                  )}
                 </button>
               ))}
             </div>

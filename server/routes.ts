@@ -787,15 +787,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           senderId: userId,
         });
         io.to(SERVER_ROOM).emit("message:receive", message);
-        for (const mentionedUserId of validMentionUserIds) {
-          const mentionedSocketId = connectedUsers.get(mentionedUserId);
-          if (mentionedSocketId) {
-            io.to(mentionedSocketId).emit("mention:received", {
-              channelId: parsed.channelId,
-              messageId: message.id,
-            });
-          }
-        }
       } catch (error) {
         console.error("Error sending message:", error);
         socket.emit("message:error", { error: "Failed to send message" });
