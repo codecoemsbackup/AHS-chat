@@ -39,6 +39,7 @@ export const users = pgTable(
     lastName: varchar("last_name"),
     profileImageUrl: varchar("profile_image_url"),
     customStatus: varchar("custom_status", { length: 80 }),
+    doNotDisturb: boolean("do_not_disturb").notNull().default(false),
     username: varchar("username").unique(),
     passwordHash: varchar("password_hash"),
     status: varchar("status").notNull().default("offline"),
@@ -222,6 +223,10 @@ export const updateUsernameSchema = z.object({
 
 export const updateCustomStatusSchema = z.object({
   customStatus: z.string().trim().max(80),
+});
+
+export const updateDoNotDisturbSchema = z.object({
+  enabled: z.boolean(),
 });
 
 export const updateChannelSchema = z.object({

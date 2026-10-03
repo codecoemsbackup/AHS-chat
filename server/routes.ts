@@ -17,6 +17,7 @@ import {
   respondToDmRequestSchema,
   updateUsernameSchema,
   updateCustomStatusSchema,
+  updateDoNotDisturbSchema,
   updateChannelSchema,
   updateAdminSchema,
   updateAdminDelegationSchema,
@@ -224,6 +225,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(publicUser(user));
     } catch (error: any) {
       sendError(res, error, "Failed to update status");
+    }
+  });
+
+  app.patch("/api/profile/do-not-disturb", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const parsed = updateDoNotDisturbSchema.parse(req.body);
+      const user = await storage.updateDoNotDisturb(actor.id, parsed.enabled);
+      ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
+      res.json(publicUser(user));
+    } catch (error: any) {
+      sendError(res, error, "Failed to update Do Not Disturb");
     }
   });
 

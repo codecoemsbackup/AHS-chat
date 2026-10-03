@@ -33,6 +33,7 @@ export interface IStorage {
   createLocalUser(username: string, passwordHash: string): Promise<User>;
   updateUserStatus(userId: string, status: string): Promise<void>;
   updateCustomStatus(userId: string, customStatus: string | null): Promise<User>;
+  updateDoNotDisturb(userId: string, enabled: boolean): Promise<User>;
   updateUsername(userId: string, username: string): Promise<User>;
   updateProfileImage(userId: string, profileImageUrl: string): Promise<User>;
 
@@ -108,6 +109,15 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db
       .update(users)
       .set({ customStatus, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async updateDoNotDisturb(userId: string, enabled: boolean): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ doNotDisturb: enabled, updatedAt: new Date() })
       .where(eq(users.id, userId))
       .returning();
     return user;
@@ -213,6 +223,10 @@ export class DatabaseStorage implements IStorage {
 
   async ensureCustomStatusSchema(): Promise<void> {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_status varchar(80)`);
+  }
+
+  async ensureDoNotDisturbSchema(): Promise<void> {
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS do_not_disturb boolean NOT NULL DEFAULT false`);
   }
 
   async getChannels(): Promise<Channel[]> {

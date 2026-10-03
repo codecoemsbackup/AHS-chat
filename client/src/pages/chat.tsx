@@ -95,6 +95,7 @@ export default function ChatPage() {
   const [statusDraft, setStatusDraft] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
   const [doNotDisturb, setDoNotDisturb] = useState(false);
+  const [dndSaving, setDndSaving] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -113,7 +114,6 @@ export default function ChatPage() {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const dmNotificationAudioRef = useRef<HTMLAudioElement | null>(null);
   const doNotDisturbRef = useRef(false);
-  const dndLoadedForUser = useRef<string | null>(null);
 
   const { data: serverData, isLoading: serverLoading } = useQuery<ServerData>({
     queryKey: ["/api/server"],
@@ -250,22 +250,10 @@ export default function ChatPage() {
   }, [dmUnreadCounts, dmUnreadLoadedUserId, user?.id]);
 
   useEffect(() => {
-    dndLoadedForUser.current = null;
-    if (!user?.id) {
-      doNotDisturbRef.current = false;
-      setDoNotDisturb(false);
-      return;
-    }
-    const enabled = localStorage.getItem(`ahs-chat-dnd:${user.id}`) === "true";
+    const enabled = user?.doNotDisturb || false;
     doNotDisturbRef.current = enabled;
     setDoNotDisturb(enabled);
-    dndLoadedForUser.current = user.id;
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || dndLoadedForUser.current !== user.id) return;
-    localStorage.setItem(`ahs-chat-dnd:${user.id}`, String(doNotDisturb));
-  }, [doNotDisturb, user?.id]);
+  }, [user?.id, user?.doNotDisturb]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -673,12 +661,26 @@ export default function ChatPage() {
     }
   };
 
-  const toggleDoNotDisturb = () => {
-    setDoNotDisturb((enabled) => {
-      const next = !enabled;
-      doNotDisturbRef.current = next;
-      return next;
-    });
+  const toggleDoNotDisturb = async () => {
+    const enabled = !doNotDisturb;
+    setDoNotDisturb(enabled);
+    doNotDisturbRef.current = enabled;
+    setDndSaving(true);
+    try {
+      const updatedUser = await apiRequest("/api/profile/do-not-disturb", "PATCH", { enabled });
+      queryClient.setQueryData(["/api/auth/user"], updatedUser);
+      void queryClient.invalidateQueries({ queryKey: ["/api/server"] });
+    } catch (error: any) {
+      setDoNotDisturb(!enabled);
+      doNotDisturbRef.current = !enabled;
+      toast({
+        title: "Couldn't update Do Not Disturb",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDndSaving(false);
+    }
   };
 
   if (authLoading || serverLoading) {
@@ -861,7 +863,8 @@ export default function ChatPage() {
                 className={`ml-auto h-7 gap-1.5 px-2 text-[11px] ${
                   doNotDisturb ? "text-destructive hover:text-destructive" : ""
                 }`}
-                onClick={toggleDoNotDisturb}
+                onClick={() => void toggleDoNotDisturb()}
+                disabled={dndSaving}
                 aria-pressed={doNotDisturb}
                 aria-label={doNotDisturb ? "Turn off Do Not Disturb" : "Turn on Do Not Disturb"}
                 title={doNotDisturb ? "Do Not Disturb is on" : "Turn on Do Not Disturb"}
@@ -1242,6 +1245,7 @@ export default function ChatPage() {
                     size="sm"
                     showOnlineStatus
                     isOnline={member.status === "online" && !member.isBanned}
+                    isDoNotDisturb={member.doNotDisturb}
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">{member.username || member.firstName || "Member"}</p>
@@ -1253,12 +1257,18 @@ export default function ChatPage() {
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
                       <span
                         className={`h-1.5 w-1.5 rounded-full ${
-                          member.status === "online" && !member.isBanned
+                          member.doNotDisturb
+                            ? "bg-red-500"
+                            : member.status === "online" && !member.isBanned
                             ? "bg-status-online"
                             : "bg-status-offline"
                         }`}
                       />
-                      {member.status === "online" && !member.isBanned ? "Online" : "Offline"}
+                      {member.doNotDisturb
+                        ? "Do not disturb"
+                        : member.status === "online" && !member.isBanned
+                          ? "Online"
+                          : "Offline"}
                     </p>
                   </div>
                   {!member.isBanned && member.id !== user.id && (
