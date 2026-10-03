@@ -96,6 +96,7 @@ export default function ChatPage() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const dmNotificationAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const { data: serverData, isLoading: serverLoading } = useQuery<ServerData>({
     queryKey: ["/api/server"],
@@ -317,10 +318,16 @@ export default function ChatPage() {
       conversationId: string;
       message: DmMessageWithSender;
     }) => {
-      if (
-        message.senderId !== user.id &&
-        conversationId !== selectedDmRef.current
-      ) {
+      if (message.senderId !== user.id) {
+        const audio = dmNotificationAudioRef.current;
+        if (audio) {
+          audio.currentTime = 0;
+          void audio.play().catch((error: unknown) => {
+            console.warn("Could not play DM notification sound", error);
+          });
+        }
+      }
+      if (message.senderId !== user.id && conversationId !== selectedDmRef.current) {
         setDmUnreadCounts((previous) => ({
           ...previous,
           [conversationId]: (previous[conversationId] || 0) + 1,
@@ -369,6 +376,16 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activeChannelId]);
+
+  useEffect(() => {
+    const audio = new Audio("/dm-notification.mp3");
+    audio.volume = 0.15;
+    dmNotificationAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      dmNotificationAudioRef.current = null;
+    };
+  }, []);
 
   const deleteMessageMutation = useMutation({
     mutationFn: (messageId: string) => apiRequest(`/api/messages/${messageId}`, "DELETE"),
