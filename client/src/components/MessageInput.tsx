@@ -195,7 +195,7 @@ export default function MessageInput({
   };
 
   return (
-    <div className="glass-panel relative border-x-0 border-b-0 p-4">
+    <div className="chat-composer glass-panel relative border-x-0 border-b-0 px-4 py-3.5 sm:px-6">
       {replyTo && (
         <div className="glass-control mb-3 flex items-center gap-2 rounded-xl border-l-2 border-primary px-3 py-2">
           <Reply className="h-4 w-4 shrink-0 text-primary" />

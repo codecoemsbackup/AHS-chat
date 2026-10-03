@@ -656,14 +656,14 @@ export default function ChatPage() {
       />
 
       <div className="app-shell flex h-dvh min-h-0 overflow-hidden">
-        <aside className="glass-panel flex min-h-0 w-[280px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar/55">
+        <aside className="chat-sidebar glass-panel flex min-h-0 w-[280px] shrink-0 flex-col border-y-0 border-l-0 border-r border-sidebar-border">
           <div className="flex items-center gap-3 border-b border-sidebar-border p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-violet-500 text-primary-foreground shadow-lg shadow-primary/20">
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">AHS Chat</p>
-              <p className="text-xs text-sidebar-foreground/60">Community server</p>
+              <p className="truncate font-bold tracking-tight">AHS Chat</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Community server</p>
             </div>
             {user.isAdmin && (
               <Button
@@ -690,7 +690,7 @@ export default function ChatPage() {
               />
               <button
                 type="button"
-                className="group relative shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group relative shrink-0 rounded-full ring-2 ring-primary/15 ring-offset-2 ring-offset-sidebar transition-shadow hover:ring-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => avatarInputRef.current?.click()}
                 disabled={avatarUploading}
                 aria-label="Change profile picture"
@@ -706,10 +706,10 @@ export default function ChatPage() {
                   <Camera className="h-4 w-4" />
                 </span>
               </button>
-              <div className="min-w-0 flex-1">
+              <div className="chat-profile-card min-w-0 flex-1 px-3 py-2">
                 <p className="truncate text-sm font-semibold">{user.username || user.firstName || "User"}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {user.isOwner ? "Owner" : user.isAdmin ? "Admin" : "Member"}
+                <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">
+                  {user.isOwner ? "Server owner" : user.isAdmin ? "Administrator" : "Community member"}
                 </p>
               </div>
               <Button variant="ghost" size="icon" asChild aria-label="Log out">
@@ -727,7 +727,7 @@ export default function ChatPage() {
           </div>
 
           <div className="px-4 pb-2 pt-5">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               <span>Text channels</span>
               {user.isAdmin && (
                 <button
@@ -751,10 +751,11 @@ export default function ChatPage() {
                     setSelectedDmId(null);
                     setSelectedChannelId(channel.id);
                   }}
-                  className={`flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-left text-sm transition-colors ${
+                  data-active={activeChannelId === channel.id}
+                  className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
                     activeChannelId === channel.id
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                      : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
+                      ? "font-semibold"
+                      : "text-muted-foreground hover:bg-sidebar-accent/65 hover:text-sidebar-accent-foreground"
                   }`}
                 >
                   <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
@@ -791,7 +792,7 @@ export default function ChatPage() {
                 </button>
               ))}
             </div>
-            <div className="mb-2 mt-6 flex items-center justify-between px-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <div className="mb-2 mt-6 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               <span>Direct messages</span>
               <span className="font-normal normal-case tracking-normal">
                 {dmConversations.filter((conversation) => conversation.status === "pending").length || ""}
@@ -806,11 +807,12 @@ export default function ChatPage() {
                     key={conversation.id}
                     type="button"
                     onClick={() => setSelectedDmId(conversation.id)}
-                    className={`flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-left text-sm transition-colors ${
-                      selectedDmId === conversation.id
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                        : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
-                    }`}
+                  data-active={selectedDmId === conversation.id}
+                  className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
+                    selectedDmId === conversation.id
+                      ? "font-semibold"
+                      : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
+                  }`}
                   >
                       <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
                         <MessageSquare className="h-4 w-4" />
@@ -862,7 +864,7 @@ export default function ChatPage() {
             />
           ) : activeChannel ? (
             <>
-              <header className="glass-panel flex h-16 shrink-0 items-center gap-3 border-x-0 border-t-0 px-6">
+              <header className="chat-main-header glass-panel flex h-[4.5rem] shrink-0 items-center gap-3 border-x-0 border-t-0 px-5 sm:px-8">
                 <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
                   {isRulesChannel(activeChannel.name) ? (
                     <ClipboardCheck
@@ -911,7 +913,7 @@ export default function ChatPage() {
                 </Button>
               </header>
 
-              <ScrollArea className="min-h-0 flex-1 px-4 py-6 sm:px-8">
+              <ScrollArea className="chat-content min-h-0 flex-1 px-4 py-6 sm:px-8">
                 <div className="mx-auto max-w-4xl">
                   {messagesLoading ? (
                     <div className="space-y-4">
@@ -1055,7 +1057,7 @@ export default function ChatPage() {
         <aside
           className={`glass-panel ${
             membersOpen ? "hidden lg:flex" : "hidden"
-          } min-h-0 w-64 shrink-0 border-y-0 border-r-0 border-l border-border/60 p-4 lg:flex-col`}
+          } min-h-0 w-64 shrink-0 border-y-0 border-r-0 border-l border-border/60 bg-card/55 p-4 lg:flex-col`}
         >
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -1087,7 +1089,7 @@ export default function ChatPage() {
             <ScrollArea className="min-h-0 flex-1">
             <div className="space-y-1">
               {filteredMembers.map((member) => (
-                <div key={member.id} className={`flex items-center gap-2 rounded-md px-2 py-2 ${member.isBanned ? "opacity-50" : ""}`}>
+                <div key={member.id} className={`chat-member-row flex items-center gap-2 px-2 py-2 ${member.isBanned ? "opacity-50" : ""}`}>
                   <UserAvatar
                     name={member.username || member.firstName || "Member"}
                     avatarUrl={member.profileImageUrl || undefined}

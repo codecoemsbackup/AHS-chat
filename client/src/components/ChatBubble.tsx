@@ -81,7 +81,7 @@ export default function ChatBubble({
           </span>
         )}
         <div
-          className={`relative inline-flex h-fit max-w-full rounded-2xl px-3.5 py-1.5 shadow-sm ${
+          className={`relative inline-flex h-fit max-w-full rounded-2xl px-4 py-2 shadow-sm transition-shadow group-hover:shadow-md ${
             isSent
               ? "glass-bubble-sent rounded-br-md text-primary-foreground"
               : "glass-bubble rounded-bl-md border"

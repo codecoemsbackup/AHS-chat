@@ -62,7 +62,7 @@ export default function DirectMessagePanel({
 
   return (
     <>
-      <header className="glass-panel flex h-16 shrink-0 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6">
+      <header className="chat-main-header glass-panel flex h-[4.5rem] shrink-0 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6">
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to channels">
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -117,7 +117,7 @@ export default function DirectMessagePanel({
             </div>
           </ScrollArea>
           <form
-            className="glass-panel flex shrink-0 items-end gap-3 border-x-0 border-b-0 p-4"
+            className="chat-composer glass-panel flex shrink-0 items-end gap-3 border-x-0 border-b-0 p-4"
             onSubmit={(event) => {
               event.preventDefault();
               void sendMessage();
