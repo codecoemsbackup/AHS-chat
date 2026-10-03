@@ -180,8 +180,9 @@
     @apply font-sans antialiased bg-background text-foreground;
     min-height: 100vh;
     background-image:
-      radial-gradient(circle at 8% 0%, hsl(var(--primary) / 0.13), transparent 30rem),
-      radial-gradient(circle at 94% 100%, hsl(190 78% 55% / 0.08), transparent 34rem);
+      radial-gradient(ellipse at 12% 4%, hsl(var(--primary) / 0.16), transparent 34rem),
+      radial-gradient(ellipse at 90% 18%, hsl(190 78% 55% / 0.10), transparent 30rem),
+      radial-gradient(ellipse at 72% 96%, hsl(325 70% 58% / 0.075), transparent 36rem);
     transition: background-color 220ms ease, color 220ms ease;
   }
 }
@@ -191,66 +192,92 @@
     position: relative;
     isolation: isolate;
     background:
-      radial-gradient(ellipse at 52% 4%, hsl(var(--primary) / 0.06), transparent 42rem),
-      hsl(var(--background) / 0.84);
+      radial-gradient(ellipse at 50% 0%, hsl(var(--primary) / 0.075), transparent 44rem),
+      linear-gradient(145deg, hsl(var(--background) / 0.75), hsl(var(--background) / 0.92));
   }
 
   .glass-panel {
-    background: hsl(var(--card) / 0.82);
-    border: 1px solid hsl(var(--border) / 0.62);
+    background: linear-gradient(145deg, hsl(var(--card) / 0.78), hsl(var(--card) / 0.62));
+    border: 1px solid hsl(var(--border) / 0.58);
     box-shadow:
-      0 16px 42px hsl(228 36% 10% / 0.06),
-      inset 0 1px 0 hsl(0 0% 100% / 0.56);
-    -webkit-backdrop-filter: blur(20px) saturate(135%);
-    backdrop-filter: blur(20px) saturate(135%);
+      0 18px 48px hsl(228 36% 10% / 0.075),
+      inset 0 1px 0 hsl(0 0% 100% / 0.66),
+      inset 0 -1px 0 hsl(var(--primary) / 0.035);
+    -webkit-backdrop-filter: blur(28px) saturate(155%);
+    backdrop-filter: blur(28px) saturate(155%);
   }
 
   .dark .glass-panel {
-    background: hsl(var(--card) / 0.82);
+    background: linear-gradient(145deg, hsl(var(--card) / 0.82), hsl(var(--card) / 0.64));
     box-shadow:
-      0 18px 46px hsl(228 65% 2% / 0.24),
-      inset 0 1px 0 hsl(0 0% 100% / 0.045);
+      0 18px 48px hsl(228 65% 2% / 0.3),
+      inset 0 1px 0 hsl(0 0% 100% / 0.075),
+      inset 0 -1px 0 hsl(var(--primary) / 0.06);
   }
 
   .glass-control {
-    border: 1px solid hsl(var(--border) / 0.72);
-    background: hsl(var(--background) / 0.42);
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.28);
-    -webkit-backdrop-filter: blur(16px) saturate(135%);
-    backdrop-filter: blur(16px) saturate(135%);
+    border: 1px solid hsl(var(--border) / 0.62);
+    background: linear-gradient(145deg, hsl(var(--background) / 0.68), hsl(var(--background) / 0.42));
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.42),
+      0 3px 12px hsl(228 40% 12% / 0.035);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    backdrop-filter: blur(22px) saturate(150%);
+    transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
   }
 
   .glass-control:hover {
-    background: hsl(var(--background) / 0.62);
-    border-color: hsl(var(--primary) / 0.38);
+    background: linear-gradient(145deg, hsl(var(--background) / 0.82), hsl(var(--background) / 0.56));
+    border-color: hsl(var(--primary) / 0.42);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.52), 0 5px 16px hsl(var(--primary) / 0.08);
+  }
+
+  .dark .glass-control {
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.08), 0 4px 16px hsl(228 70% 2% / 0.14);
   }
 
   .glass-bubble {
     border-color: hsl(var(--border) / 0.58);
-    background: hsl(var(--card) / 0.58);
+    background: linear-gradient(145deg, hsl(var(--card) / 0.82), hsl(var(--card) / 0.6));
     box-shadow:
-      0 8px 24px hsl(220 45% 10% / 0.06),
-      inset 0 1px 0 hsl(0 0% 100% / 0.30);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
-    backdrop-filter: blur(18px) saturate(140%);
+      0 8px 24px hsl(220 45% 10% / 0.075),
+      inset 0 1px 0 hsl(0 0% 100% / 0.42);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    backdrop-filter: blur(22px) saturate(150%);
   }
 
   .glass-bubble-sent {
-    background: hsl(var(--primary) / 0.86);
+    background: linear-gradient(145deg, hsl(var(--primary) / 0.94), hsl(var(--primary) / 0.76));
     box-shadow:
-      0 8px 24px hsl(var(--primary) / 0.20),
-      inset 0 1px 0 hsl(0 0% 100% / 0.24);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
-    backdrop-filter: blur(18px) saturate(140%);
+      0 10px 28px hsl(var(--primary) / 0.22),
+      inset 0 1px 0 hsl(0 0% 100% / 0.36);
+    -webkit-backdrop-filter: blur(22px) saturate(155%);
+    backdrop-filter: blur(22px) saturate(155%);
+  }
+
+  .glass-float {
+    border-color: hsl(var(--border) / 0.6);
+    background: linear-gradient(145deg, hsl(var(--popover) / 0.9), hsl(var(--popover) / 0.76));
+    box-shadow:
+      0 18px 50px hsl(228 45% 8% / 0.17),
+      inset 0 1px 0 hsl(0 0% 100% / 0.5);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+    backdrop-filter: blur(30px) saturate(160%);
+  }
+
+  .dark .glass-float {
+    box-shadow: 0 20px 55px hsl(228 80% 2% / 0.45), inset 0 1px 0 hsl(0 0% 100% / 0.07);
   }
 
   .chat-sidebar {
-    background: hsl(var(--sidebar) / 0.94);
+    background: linear-gradient(160deg, hsl(var(--sidebar) / 0.86), hsl(var(--sidebar) / 0.7));
     box-shadow: 12px 0 36px hsl(228 40% 10% / 0.035);
+    -webkit-backdrop-filter: blur(30px) saturate(150%);
+    backdrop-filter: blur(30px) saturate(150%);
   }
 
   .dark .chat-sidebar {
-    background: hsl(var(--sidebar) / 0.97);
+    background: linear-gradient(160deg, hsl(var(--sidebar) / 0.91), hsl(var(--sidebar) / 0.77));
     box-shadow: 12px 0 36px hsl(228 70% 2% / 0.16);
   }
 
@@ -267,17 +294,19 @@
   }
 
   .channel-nav-item[data-active="true"] {
-    border-color: hsl(var(--primary) / 0.14);
-    background: linear-gradient(100deg, hsl(var(--primary) / 0.14), hsl(var(--primary) / 0.055));
+    border-color: hsl(var(--primary) / 0.2);
+    background: linear-gradient(110deg, hsl(var(--primary) / 0.17), hsl(var(--primary) / 0.075));
     color: hsl(var(--primary));
-    box-shadow: inset 3px 0 hsl(var(--primary));
+    box-shadow: inset 3px 0 hsl(var(--primary)), 0 5px 16px hsl(var(--primary) / 0.075);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
   }
 
   .chat-main-header {
-    background: hsl(var(--card) / 0.78);
+    background: linear-gradient(110deg, hsl(var(--card) / 0.78), hsl(var(--card) / 0.58));
     box-shadow: 0 8px 22px hsl(228 40% 12% / 0.025);
-    -webkit-backdrop-filter: blur(18px);
-    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    backdrop-filter: blur(26px) saturate(150%);
   }
 
   .chat-content {
@@ -299,7 +328,10 @@
 
   .chat-composer {
     border-top: 1px solid hsl(var(--border) / 0.78);
-    background: linear-gradient(180deg, hsl(var(--background) / 0.55), hsl(var(--card) / 0.94));
+    background: linear-gradient(180deg, hsl(var(--background) / 0.62), hsl(var(--card) / 0.78));
+    box-shadow: 0 -12px 34px hsl(228 40% 10% / 0.035), inset 0 1px 0 hsl(0 0% 100% / 0.4);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    backdrop-filter: blur(26px) saturate(150%);
   }
 }
 
