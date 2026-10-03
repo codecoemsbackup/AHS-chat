@@ -76,7 +76,8 @@ export default function DirectMessagePanel({
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold">{peerName}</h1>
           <p className="text-xs text-muted-foreground">
-            {conversation.status === "accepted" ? "Direct message" : "Direct message request"}
+            {conversation.peer.customStatus ||
+              (conversation.status === "accepted" ? "Direct message" : "Direct message request")}
           </p>
         </div>
       </header>

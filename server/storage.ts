@@ -32,6 +32,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createLocalUser(username: string, passwordHash: string): Promise<User>;
   updateUserStatus(userId: string, status: string): Promise<void>;
+  updateCustomStatus(userId: string, customStatus: string | null): Promise<User>;
   updateUsername(userId: string, username: string): Promise<User>;
   updateProfileImage(userId: string, profileImageUrl: string): Promise<User>;
 
@@ -101,6 +102,15 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ status, lastSeen: new Date(), updatedAt: new Date() })
       .where(eq(users.id, userId));
+  }
+
+  async updateCustomStatus(userId: string, customStatus: string | null): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ customStatus, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
   }
 
   async updateUsername(userId: string, username: string): Promise<User> {
@@ -199,6 +209,10 @@ export class DatabaseStorage implements IStorage {
       data bytea NOT NULL,
       created_at timestamp DEFAULT now()
     )`);
+  }
+
+  async ensureCustomStatusSchema(): Promise<void> {
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_status varchar(80)`);
   }
 
   async getChannels(): Promise<Channel[]> {
@@ -389,6 +403,7 @@ export class DatabaseStorage implements IStorage {
         firstName: peer.firstName,
         profileImageUrl: peer.profileImageUrl,
         status: peer.status,
+        customStatus: peer.customStatus,
       },
       isIncoming: conversation.requesterId !== userId,
     }));
@@ -425,6 +440,7 @@ export class DatabaseStorage implements IStorage {
         firstName: row.peer.firstName,
         profileImageUrl: row.peer.profileImageUrl,
         status: row.peer.status,
+        customStatus: row.peer.customStatus,
       },
       isIncoming: row.conversation.requesterId !== userId,
     };

@@ -16,6 +16,7 @@ import {
   createDmConversationSchema,
   respondToDmRequestSchema,
   updateUsernameSchema,
+  updateCustomStatusSchema,
   updateChannelSchema,
   updateAdminSchema,
   updateAdminDelegationSchema,
@@ -210,6 +211,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(publicUser(user));
     } catch (error: any) {
       sendError(res, error, "Failed to update profile picture");
+    }
+  });
+
+  app.patch("/api/profile/status", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const parsed = updateCustomStatusSchema.parse(req.body);
+      const user = await storage.updateCustomStatus(actor.id, parsed.customStatus || null);
+      ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
+      res.json(publicUser(user));
+    } catch (error: any) {
+      sendError(res, error, "Failed to update status");
     }
   });
 

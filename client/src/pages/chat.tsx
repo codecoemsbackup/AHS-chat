@@ -13,6 +13,7 @@ import {
   Users,
   Wifi,
   Camera,
+  Pencil,
   X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,14 @@ import ServerSettingsDialog, {
   type ServerMember,
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ServerData {
   server: Server;
@@ -80,6 +89,9 @@ export default function ChatPage() {
   const [selectedDmId, setSelectedDmId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [statusDraft, setStatusDraft] = useState("");
+  const [statusSaving, setStatusSaving] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -304,6 +316,7 @@ export default function ChatPage() {
     };
     const handleMemberUpdated = (payload: Partial<User> & { userId?: string }) => {
       invalidateServer();
+      void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
       if (payload.id === user.id || payload.userId === user.id) {
         void queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       }
@@ -617,6 +630,25 @@ export default function ChatPage() {
     }
   };
 
+  const saveCustomStatus = async (customStatus: string) => {
+    setStatusSaving(true);
+    try {
+      const updatedUser = await apiRequest("/api/profile/status", "PATCH", { customStatus });
+      queryClient.setQueryData(["/api/auth/user"], updatedUser);
+      void queryClient.invalidateQueries({ queryKey: ["/api/server"] });
+      setStatusDraft(updatedUser.customStatus || "");
+      setStatusDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Couldn't update status",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   if (authLoading || serverLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -654,6 +686,58 @@ export default function ChatPage() {
         members={members}
         actor={members.find((member) => member.id === user.id) || user}
       />
+      <Dialog
+        open={statusDialogOpen}
+        onOpenChange={(open) => {
+          setStatusDialogOpen(open);
+          if (open) setStatusDraft(user.customStatus || "");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set a status</DialogTitle>
+            <DialogDescription>
+              Share a short note with everyone in AHS Chat.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={statusDraft}
+            onChange={(event) => setStatusDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void saveCustomStatus(statusDraft);
+              }
+            }}
+            placeholder="What are you up to?"
+            maxLength={80}
+            aria-label="Custom status"
+          />
+          <p className="text-right text-xs text-muted-foreground">
+            {statusDraft.length}/80
+          </p>
+          <DialogFooter>
+            {user.customStatus && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={statusSaving}
+                onClick={() => void saveCustomStatus("")}
+              >
+                Clear status
+              </Button>
+            )}
+            <Button
+              type="button"
+              disabled={statusSaving}
+              onClick={() => void saveCustomStatus(statusDraft)}
+            >
+              {statusSaving ? "Saving..." : "Save status"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="app-shell flex h-dvh min-h-0 overflow-hidden">
         <aside className="chat-sidebar glass-panel flex min-h-0 w-[280px] shrink-0 flex-col border-y-0 border-l-0 border-r border-sidebar-border">
@@ -706,11 +790,21 @@ export default function ChatPage() {
                   <Camera className="h-4 w-4" />
                 </span>
               </button>
-              <div className="chat-profile-card min-w-0 flex-1 px-3 py-2">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{user.username || user.firstName || "User"}</p>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">
-                  {user.isOwner ? "Server owner" : user.isAdmin ? "Administrator" : "Community member"}
-                </p>
+                <button
+                  type="button"
+                  className="mt-1 flex max-w-full items-center gap-1.5 rounded-md text-left text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    setStatusDraft(user.customStatus || "");
+                    setStatusDialogOpen(true);
+                  }}
+                  aria-label={user.customStatus ? `Edit status: ${user.customStatus}` : "Set a status"}
+                  title="Set a custom status"
+                >
+                  <Pencil className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{user.customStatus || "Set a status"}</span>
+                </button>
               </div>
               <Button variant="ghost" size="icon" asChild aria-label="Log out">
                 <a href="/api/logout"><LogOut className="h-4 w-4" /></a>
@@ -1100,7 +1194,9 @@ export default function ChatPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">{member.username || member.firstName || "Member"}</p>
                     <p className="text-xs text-muted-foreground">
-                      {member.isOwner ? "Owner" : member.isAdmin ? "Admin" : member.isBanned ? "Banned" : "Member"}
+                      {member.isBanned
+                        ? "Banned"
+                        : member.customStatus || (member.isAdmin ? "Admin" : "Member")}
                     </p>
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
                       <span

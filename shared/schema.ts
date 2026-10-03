@@ -38,6 +38,7 @@ export const users = pgTable(
     firstName: varchar("first_name"),
     lastName: varchar("last_name"),
     profileImageUrl: varchar("profile_image_url"),
+    customStatus: varchar("custom_status", { length: 80 }),
     username: varchar("username").unique(),
     passwordHash: varchar("password_hash"),
     status: varchar("status").notNull().default("offline"),
@@ -219,6 +220,10 @@ export const updateUsernameSchema = z.object({
   username: z.string().trim().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/),
 });
 
+export const updateCustomStatusSchema = z.object({
+  customStatus: z.string().trim().max(80),
+});
+
 export const updateChannelSchema = z.object({
   name: z.string().trim().min(1).max(40).regex(/^[a-zA-Z0-9][a-zA-Z0-9-_ ]*$/),
   description: z.string().trim().max(120).optional(),
@@ -265,7 +270,7 @@ export type ServerMessageWithRelations = ServerMessage & {
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;
 export type DmConversationWithPeer = DmConversation & {
-  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status">;
+  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus">;
   isIncoming: boolean;
 };
 export type DmMessageWithSender = DmMessage & {
