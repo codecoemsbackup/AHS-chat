@@ -6,6 +6,7 @@ interface UserAvatarProps {
   size?: "sm" | "md" | "lg";
   showOnlineStatus?: boolean;
   isOnline?: boolean;
+  isDoNotDisturb?: boolean;
 }
 
 export default function UserAvatar({
@@ -14,6 +15,7 @@ export default function UserAvatar({
   size = "md",
   showOnlineStatus = false,
   isOnline = false,
+  isDoNotDisturb = false,
 }: UserAvatarProps) {
   const sizeClasses = {
     sm: "w-8 h-8 text-xs",
@@ -45,7 +47,7 @@ export default function UserAvatar({
       {showOnlineStatus && (
         <span
           className={`absolute bottom-0 right-0 rounded-full border-2 border-background ${statusSizeClasses[size]} ${
-            isOnline ? "bg-status-online" : "bg-status-offline"
+            isDoNotDisturb ? "bg-red-500" : isOnline ? "bg-status-online" : "bg-status-offline"
           }`}
         />
       )}

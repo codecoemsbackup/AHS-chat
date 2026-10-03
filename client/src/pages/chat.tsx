@@ -817,6 +817,7 @@ export default function ChatPage() {
                   size="md"
                   showOnlineStatus
                   isOnline={currentStatus === "online"}
+                  isDoNotDisturb={doNotDisturb}
                 />
                 <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
                   <Camera className="h-4 w-4" />
@@ -845,7 +846,11 @@ export default function ChatPage() {
             <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
-                  currentStatus === "online" ? "bg-status-online" : "bg-status-offline"
+                  doNotDisturb
+                    ? "bg-red-500"
+                    : currentStatus === "online"
+                      ? "bg-status-online"
+                      : "bg-status-offline"
                 }`}
               />
               <span>{currentStatus === "online" ? "Online" : "Offline"}</span>
