@@ -774,7 +774,7 @@ export default function ChatPage() {
               />
               <button
                 type="button"
-                className="group relative shrink-0 rounded-full ring-2 ring-primary/15 ring-offset-2 ring-offset-sidebar transition-shadow hover:ring-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group relative shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => avatarInputRef.current?.click()}
                 disabled={avatarUploading}
                 aria-label="Change profile picture"
