@@ -9,7 +9,6 @@ import {
   MessageSquare,
   Search,
   Settings,
-  ShieldCheck,
   Users,
   Wifi,
   Camera,
@@ -44,6 +43,7 @@ import MessageInput, {
 import UserAvatar from "@/components/UserAvatar";
 import AvatarCropDialog from "@/components/AvatarCropDialog";
 import ThemeToggle from "@/components/ThemeToggle";
+import BrandLogo from "@/components/BrandLogo";
 import UsernameSetup from "@/components/UsernameSetup";
 import ServerSettingsDialog, {
   type ServerMember,
@@ -778,9 +778,7 @@ export default function ChatPage() {
       <div className="app-shell flex h-dvh min-h-0 overflow-hidden">
         <aside className="chat-sidebar glass-panel flex min-h-0 w-[280px] shrink-0 flex-col border-y-0 border-l-0 border-r border-sidebar-border">
           <div className="flex items-center gap-3 border-b border-sidebar-border p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-violet-500 text-primary-foreground shadow-lg shadow-primary/20">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
+            <BrandLogo className="h-10 w-10 shrink-0 object-contain" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-bold tracking-tight">AHS Chat</p>
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Community server</p>

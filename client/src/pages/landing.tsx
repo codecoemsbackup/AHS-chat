@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Users, Zap, Shield } from "lucide-react";
+import { Users, Zap, Shield } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function LandingPage() {
   return (
@@ -8,9 +9,7 @@ export default function LandingPage() {
       <header className="glass-panel sticky top-0 z-10 border-x-0 border-t-0">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-6 h-6 text-primary-foreground" />
-            </div>
+            <BrandLogo className="h-10 w-10 object-contain" />
             <h1 className="text-2xl font-bold">AHS Chat</h1>
           </div>
           <div className="flex items-center gap-2">

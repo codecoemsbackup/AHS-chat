@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Check, MessageSquare, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
 import ThemeToggle from "@/components/ThemeToggle";
+import BrandLogo from "@/components/BrandLogo";
 
 interface Availability {
   available: boolean;
@@ -73,9 +74,7 @@ export default function SignupPage() {
       </div>
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
-            <MessageSquare className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <BrandLogo className="h-12 w-12 object-contain" />
           <h1 className="text-4xl font-bold">AHS Chat</h1>
         </div>
 
