@@ -79,6 +79,7 @@ export default function MessageInput({
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const [gifQuery, setGifQuery] = useState("");
   const [gifResults, setGifResults] = useState<GifResult[]>([]);
+  const [gifProviders, setGifProviders] = useState<string[]>([]);
   const [gifLoading, setGifLoading] = useState(false);
   const [gifError, setGifError] = useState("");
   const [mentionUserIds, setMentionUserIds] = useState<Set<string>>(new Set());
@@ -146,9 +147,12 @@ export default function MessageInput({
       const params = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
       const result = await apiRequest(`/api/gifs/search${params}`, "GET");
       setGifResults(result.gifs || []);
+      setGifProviders(result.providers || []);
+      setGifError(result.warning || "");
     } catch (error: any) {
       setGifError(error.message || "GIF search is unavailable");
       setGifResults([]);
+      setGifProviders([]);
     } finally {
       setGifLoading(false);
     }
@@ -332,8 +336,8 @@ export default function MessageInput({
             <Input
               value={gifQuery}
               onChange={(event) => setGifQuery(event.target.value)}
-              placeholder="Search Tenor GIFs"
-              aria-label="Search Tenor GIFs"
+              placeholder="Search GIFs"
+              aria-label="Search GIFs"
               autoFocus
             />
             <Button type="submit" size="icon" variant="secondary" disabled={gifLoading}>
@@ -379,7 +383,11 @@ export default function MessageInput({
               Search for a GIF to get started.
             </p>
           )}
-          <p className="mt-2 text-[10px] text-muted-foreground">Powered by Tenor</p>
+          {gifProviders.length > 0 && (
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Powered by {gifProviders.join(" and ")}
+            </p>
+          )}
         </div>
       )}
       {mentionSuggestions.length > 0 && activeMention && (

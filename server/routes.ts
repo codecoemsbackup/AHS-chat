@@ -76,6 +76,23 @@ function sendError(res: Response, error: any, fallback: string, status = 400) {
   res.status(status).json({ message: error?.message || fallback });
 }
 
+interface GifSearchResult {
+  id: string;
+  title: string;
+  url: string;
+  previewUrl: string;
+  width: number;
+  height: number;
+}
+
+function isGifCdnUrl(url: URL) {
+  return (
+    url.protocol === "https:" &&
+    (url.hostname === "media.tenor.com" ||
+      url.hostname === "media.giphy.com" ||
+      /^media\d+\.giphy\.com$/i.test(url.hostname))
+  );
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
@@ -212,54 +229,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/gifs/search", isAuthenticated, async (req: any, res: Response) => {
     try {
       if (!(await activeUser(req, res))) return;
-      const apiKey = process.env.TENOR_API_KEY;
-      if (!apiKey) {
-        return res.status(503).json({ message: "GIF search is not configured" });
-      }
-
       const query = String(req.query.q || "").trim().slice(0, 100);
-      const endpoint = query
-        ? "https://tenor.googleapis.com/v2/search"
-        : "https://tenor.googleapis.com/v2/featured";
-      const url = new URL(endpoint);
-      url.searchParams.set("key", apiKey);
-      url.searchParams.set("client_key", "ahs-chat");
-      url.searchParams.set("limit", "24");
-      url.searchParams.set("media_filter", "gif,tinygif");
-      if (query) url.searchParams.set("q", query);
+      const providers: Array<{
+        name: "Tenor" | "GIPHY";
+        search: () => Promise<GifSearchResult[]>;
+      }> = [];
+      const tenorApiKey = process.env.TENOR_API_KEY;
+      const giphyApiKey = process.env.GIPHY_API_KEY;
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Tenor returned ${response.status}`);
+      if (tenorApiKey) {
+        providers.push({
+          name: "Tenor",
+          search: async () => {
+            const endpoint = query
+              ? "https://tenor.googleapis.com/v2/search"
+              : "https://tenor.googleapis.com/v2/featured";
+            const url = new URL(endpoint);
+            url.searchParams.set("key", tenorApiKey);
+            url.searchParams.set("client_key", "ahs-chat");
+            url.searchParams.set("limit", "24");
+            url.searchParams.set("media_filter", "gif,tinygif");
+            if (query) url.searchParams.set("q", query);
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Tenor returned ${response.status}`);
+            const payload = (await response.json()) as {
+              results?: Array<{
+                id?: string;
+                content_description?: string;
+                media_formats?: Record<string, { url?: string; dims?: [number, number] }>;
+              }>;
+            };
+            return (payload.results || []).flatMap((result) => {
+              const formats = result.media_formats || {};
+              const media = formats.gif || formats.mediumgif || formats.tinygif;
+              const preview = formats.tinygif || media;
+              if (!result.id || !media?.url || !preview?.url) return [];
+              return [{
+                id: `tenor:${result.id}`,
+                title: result.content_description || "Tenor GIF",
+                url: media.url,
+                previewUrl: preview.url,
+                width: media.dims?.[0] || 240,
+                height: media.dims?.[1] || 180,
+              }];
+            });
+          },
+        });
       }
-      const payload = (await response.json()) as {
-        results?: Array<{
-          id?: string;
-          content_description?: string;
-          media_formats?: Record<
-            string,
-            { url?: string; dims?: [number, number] }
-          >;
-        }>;
-        next?: string;
-      };
-      const gifs = (payload.results || [])
-        .map((result) => {
-          const formats = result.media_formats || {};
-          const media = formats.gif || formats.mediumgif || formats.tinygif;
-          const preview = formats.tinygif || media;
-          if (!result.id || !media?.url || !preview?.url) return null;
-          return {
-            id: result.id,
-            title: result.content_description || "Tenor GIF",
-            url: media.url,
-            previewUrl: preview.url,
-            width: media.dims?.[0] || 240,
-            height: media.dims?.[1] || 180,
-          };
-        })
-        .filter(Boolean);
-      res.json({ gifs, next: payload.next || null });
+
+      if (giphyApiKey) {
+        providers.push({
+          name: "GIPHY",
+          search: async () => {
+            const url = new URL(
+              query
+                ? "https://api.giphy.com/v1/gifs/search"
+                : "https://api.giphy.com/v1/gifs/trending",
+            );
+            url.searchParams.set("api_key", giphyApiKey);
+            url.searchParams.set("limit", "24");
+            url.searchParams.set("rating", "g");
+            if (query) url.searchParams.set("q", query);
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`GIPHY returned ${response.status}`);
+            const payload = (await response.json()) as {
+              data?: Array<{
+                id?: string;
+                title?: string;
+                images?: Record<string, {
+                  url?: string;
+                  width?: string;
+                  height?: string;
+                }>;
+              }>;
+            };
+            return (payload.data || []).flatMap((result) => {
+              const media = result.images?.original;
+              const preview = result.images?.fixed_width_small || result.images?.fixed_width || media;
+              if (!result.id || !media?.url || !preview?.url) return [];
+              return [{
+                id: `giphy:${result.id}`,
+                title: result.title || "GIPHY GIF",
+                url: media.url,
+                previewUrl: preview.url,
+                width: Number(media.width) || 240,
+                height: Number(media.height) || 180,
+              }];
+            });
+          },
+        });
+      }
+
+      if (providers.length === 0) {
+        return res.status(503).json({
+          message: "GIF search is not configured. Set TENOR_API_KEY or GIPHY_API_KEY.",
+        });
+      }
+
+      const outcomes = await Promise.all(
+        providers.map(async (provider) => {
+          try {
+            return { provider: provider.name, gifs: await provider.search() };
+          } catch (error) {
+            return {
+              provider: provider.name,
+              error: error instanceof Error ? error.message : "Unknown provider error",
+            };
+          }
+        }),
+      );
+      const gifs = outcomes.flatMap((outcome) => "gifs" in outcome ? outcome.gifs : []);
+      const failures = outcomes.flatMap((outcome) =>
+        "error" in outcome ? [`${outcome.provider}: ${outcome.error}`] : [],
+      );
+      if (gifs.length === 0 && failures.length > 0) {
+        throw new Error(failures.join("; "));
+      }
+      res.json({
+        gifs,
+        providers: outcomes.filter((outcome) => "gifs" in outcome).map((outcome) => outcome.provider),
+        warning: failures.length > 0 ? `Some GIF providers failed: ${failures.join("; ")}` : undefined,
+      });
     } catch (error: any) {
       sendError(res, error, "Failed to search GIFs", 502);
     }
@@ -269,18 +361,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!(await activeUser(req, res))) return;
       const sourceUrl = new URL(String(req.body?.url || ""));
-      if (
-        sourceUrl.protocol !== "https:" ||
-        (sourceUrl.hostname !== "tenor.com" && !sourceUrl.hostname.endsWith(".tenor.com"))
-      ) {
-        return res.status(400).json({ message: "Only Tenor GIFs can be imported" });
+      if (!isGifCdnUrl(sourceUrl)) {
+        return res.status(400).json({ message: "Only GIFs from Tenor or GIPHY can be imported" });
       }
 
       const response = await fetch(sourceUrl);
-      if (!response.ok) throw new Error(`Tenor returned ${response.status}`);
+      if (!response.ok) throw new Error(`GIF provider returned ${response.status}`);
+      if (!isGifCdnUrl(new URL(response.url))) {
+        return res.status(400).json({ message: "GIF provider redirected to an unsupported host" });
+      }
       const contentType = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
       if (!["image/gif", "image/webp", "image/jpeg", "image/png"].includes(contentType)) {
-        return res.status(400).json({ message: "That Tenor result is not an image" });
+        return res.status(400).json({ message: "That GIF result is not an image" });
       }
       const buffer = Buffer.from(await response.arrayBuffer());
       if (buffer.length === 0 || buffer.length > MAX_ATTACHMENT_BYTES) {
@@ -288,7 +380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1];
       const dataUrl = `data:${contentType};base64,${buffer.toString("base64")}`;
-      const upload = await saveUpload(dataUrl, `tenor-gif.${extension}`, {
+      const upload = await saveUpload(dataUrl, `gif.${extension}`, {
         kind: "attachment",
         maxBytes: MAX_ATTACHMENT_BYTES,
       });
