@@ -775,12 +775,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           return;
         }
+        const mentionsEveryone = parsed.mentionUserIds.includes("@everyone");
+        if (mentionsEveryone && !sender.isAdmin) {
+          socket.emit("message:error", {
+            error: "Only admins can use @everyone",
+          });
+          return;
+        }
         const members = await storage.getMembers();
-        const validMentionUserIds = Array.from(new Set(parsed.mentionUserIds)).filter(
-          (mentionedUserId) =>
-            mentionedUserId !== userId &&
-            members.some((member) => member.id === mentionedUserId && !member.isBanned),
-        );
+        const validMentionUserIds = mentionsEveryone
+          ? members
+              .filter((member) => member.id !== userId && !member.isBanned)
+              .map((member) => member.id)
+          : Array.from(new Set(parsed.mentionUserIds)).filter(
+              (mentionedUserId) =>
+                mentionedUserId !== userId &&
+                members.some((member) => member.id === mentionedUserId && !member.isBanned),
+            );
         const message = await storage.createMessage({
           ...parsed,
           mentionUserIds: validMentionUserIds,

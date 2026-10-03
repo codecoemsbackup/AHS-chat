@@ -1023,6 +1023,7 @@ export default function ChatPage() {
                     onSendGif={handleSendGif}
                     isUploading={attachmentUploading}
                     mentionableMembers={mentionableMembers}
+                    canUseEveryoneMention={user.isAdmin}
                     replyTo={replyingTo}
                     onCancelReply={() => setReplyingTo(null)}
                     onFileError={(message) =>

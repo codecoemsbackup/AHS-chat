@@ -53,6 +53,7 @@ interface MessageInputProps {
   isUploading?: boolean;
   onFileError?: (message: string) => void;
   mentionableMembers?: MentionMember[];
+  canUseEveryoneMention?: boolean;
   replyTo?: ReplyTarget | null;
   onCancelReply?: () => void;
   onSendGif?: (
@@ -69,6 +70,7 @@ export default function MessageInput({
   isUploading = false,
   onFileError,
   mentionableMembers = [],
+  canUseEveryoneMention = false,
   replyTo,
   onCancelReply,
   onSendGif,
@@ -107,6 +109,10 @@ export default function MessageInput({
       })
       .slice(0, 6);
   }, [activeMention, mentionableMembers]);
+  const showEveryoneSuggestion =
+    canUseEveryoneMention &&
+    !!activeMention &&
+    "everyone".startsWith(activeMention.query);
 
   const selectFile = (file: File) => {
     if (file.size > MAX_ATTACHMENT_BYTES) {
@@ -298,6 +304,9 @@ export default function MessageInput({
             setMentionUserIds((current) => {
               const next = new Set(
                 Array.from(current).filter((id) => {
+                  if (id === "@everyone") {
+                    return nextMessage.toLowerCase().includes("@everyone");
+                  }
                   const member = mentionableMembers.find((item) => item.id === id);
                   const label = member?.username || member?.firstName;
                   return label ? nextMessage.toLowerCase().includes(`@${label.toLowerCase()}`) : false;
@@ -390,11 +399,40 @@ export default function MessageInput({
           )}
         </div>
       )}
-      {mentionSuggestions.length > 0 && activeMention && (
+      {(mentionSuggestions.length > 0 || showEveryoneSuggestion) && activeMention && (
         <div className="glass-panel absolute bottom-20 left-4 z-20 w-64 overflow-hidden rounded-xl border p-1 shadow-xl">
-          <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Mention someone
-          </p>
+          {showEveryoneSuggestion && (
+            <>
+              <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Notify everyone
+              </p>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-primary/10"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  const start = activeMention.start;
+                  const nextMessage = `${message.slice(0, start)}@everyone ${message.slice(cursorPosition)}`;
+                  const nextCursor = start + "@everyone ".length;
+                  setMessage(nextMessage);
+                  setMentionUserIds((current) => new Set(current).add("@everyone"));
+                  setCursorPosition(nextCursor);
+                  requestAnimationFrame(() => {
+                    textareaRef.current?.focus();
+                    textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+                  });
+                }}
+              >
+                <AtSign className="h-4 w-4 text-destructive" />
+                <span className="truncate font-semibold">@everyone</span>
+              </button>
+            </>
+          )}
+          {mentionSuggestions.length > 0 && (
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Mention someone
+            </p>
+          )}
           {mentionSuggestions.map((member) => {
             const label = member.username || member.firstName || "Member";
             return (
