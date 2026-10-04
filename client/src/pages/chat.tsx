@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Hash,
@@ -160,6 +160,7 @@ export default function ChatPage() {
   const selectedDmRef = useRef<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelScrollAreaRef = useRef<HTMLDivElement>(null);
   const channelScrollRestoreRef = useRef<{
     element: HTMLElement;
     scrollHeight: number;
@@ -585,7 +586,7 @@ export default function ChatPage() {
     };
   }, [user?.id, queryClient, toast]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = previousChannelMessagesRef.current;
     const lastMessageId = messages[messages.length - 1]?.id;
     const restore = channelScrollRestoreRef.current;
@@ -593,11 +594,25 @@ export default function ChatPage() {
       const scrollHeightDelta = restore.element.scrollHeight - restore.scrollHeight;
       restore.element.scrollTop = restore.scrollTop + scrollHeightDelta;
       channelScrollRestoreRef.current = null;
-    } else if (previous.channelId !== activeChannelId || previous.lastMessageId !== lastMessageId) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else if (
+      !messagesLoading &&
+      messages.length > 0 &&
+      (previous.channelId !== activeChannelId || previous.lastMessageId !== lastMessageId)
+    ) {
+      const viewport = channelScrollAreaRef.current?.querySelector<HTMLElement>(
+        "[data-radix-scroll-area-viewport]",
+      );
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+        requestAnimationFrame(() => {
+          viewport.scrollTop = viewport.scrollHeight;
+        });
+      } else {
+        messagesEndRef.current?.scrollIntoView();
+      }
     }
     previousChannelMessagesRef.current = { channelId: activeChannelId, lastMessageId };
-  }, [messages, activeChannelId]);
+  }, [messages, activeChannelId, messagesLoading]);
 
   const loadOlderChannelMessages = async (element: HTMLElement) => {
     if (
@@ -1399,6 +1414,7 @@ export default function ChatPage() {
               </header>
 
               <ScrollArea
+                ref={channelScrollAreaRef}
                 className="chat-content min-h-0 flex-1 px-4 py-6 sm:px-8"
                 onScrollCapture={(event) => {
                   void loadOlderChannelMessages(event.target as HTMLElement);

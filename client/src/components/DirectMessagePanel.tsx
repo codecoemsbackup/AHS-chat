@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, MessageSquare, Send, X } from "lucide-react";
 import type { DmConversationWithPeer, DmMessageWithSender, MessagePage } from "@shared/schema";
@@ -30,6 +30,7 @@ export default function DirectMessagePanel({
   const [sending, setSending] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageScrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollRestoreRef = useRef<{
     element: HTMLElement;
     scrollHeight: number;
@@ -47,7 +48,7 @@ export default function DirectMessagePanel({
   });
   const messages = messagePage?.messages || [];
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = previousMessagesRef.current;
     const lastMessageId = messages[messages.length - 1]?.id;
     const restore = scrollRestoreRef.current;
@@ -56,13 +57,27 @@ export default function DirectMessagePanel({
         restore.scrollTop + (restore.element.scrollHeight - restore.scrollHeight);
       scrollRestoreRef.current = null;
     } else if (
-      previous.conversationId !== conversation.id ||
-      previous.lastMessageId !== lastMessageId
+      !isLoading &&
+      messages.length > 0 &&
+      (
+        previous.conversationId !== conversation.id ||
+        previous.lastMessageId !== lastMessageId
+      )
     ) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const viewport = messageScrollAreaRef.current?.querySelector<HTMLElement>(
+        "[data-radix-scroll-area-viewport]",
+      );
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+        requestAnimationFrame(() => {
+          viewport.scrollTop = viewport.scrollHeight;
+        });
+      } else {
+        messagesEndRef.current?.scrollIntoView();
+      }
     }
     previousMessagesRef.current = { conversationId: conversation.id, lastMessageId };
-  }, [messages, conversation.id]);
+  }, [messages, conversation.id, isLoading]);
 
   const loadOlderMessages = async (element: HTMLElement) => {
     if (
@@ -168,6 +183,7 @@ export default function DirectMessagePanel({
       {conversation.status === "accepted" ? (
         <>
           <ScrollArea
+            ref={messageScrollAreaRef}
             className="min-h-0 flex-1 px-4 py-6 sm:px-8"
             onScrollCapture={(event) => {
               void loadOlderMessages(event.target as HTMLElement);
