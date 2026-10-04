@@ -42,14 +42,15 @@ export default function DirectMessagePanel({
     const content = draft.trim();
     if (!content || sending) return;
     setSending(true);
+    setDraft("");
     try {
       await apiRequest(messagesUrl, "POST", { content });
-      setDraft("");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [messagesUrl] }),
         queryClient.invalidateQueries({ queryKey: ["/api/dms"] }),
       ]);
     } catch (error: any) {
+      setDraft((current) => current || content);
       toast({
         title: "Message not sent",
         description: error.message || "Please try again.",
@@ -137,7 +138,6 @@ export default function DirectMessagePanel({
               className="glass-control min-h-10 max-h-32 resize-none"
               rows={1}
               maxLength={2000}
-              disabled={sending}
               aria-label={`Message ${peerName}`}
             />
             <Button type="submit" size="icon" disabled={!draft.trim() || sending} aria-label="Send direct message">
