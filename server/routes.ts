@@ -841,6 +841,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.set("chatIo", io);
 
   io.on("connection", (socket) => {
+    socket.on("connection:ping", (acknowledge?: (response: { ok: true }) => void) => {
+      acknowledge?.({ ok: true });
+    });
+
     socket.on("user:connect", async (requestedUserId: string) => {
       const sessionUserId = (socket.request as any).user?.claims?.sub;
       if (!sessionUserId || sessionUserId !== requestedUserId) {

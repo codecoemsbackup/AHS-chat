@@ -11,7 +11,6 @@ import {
   Search,
   Settings,
   Users,
-  Wifi,
   Camera,
   Pencil,
   Bell,
@@ -70,6 +69,40 @@ interface ServerData {
 
 const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls"]);
 const MESSAGE_PAGE_SIZE = 30;
+
+function ConnectionQualityIcon({
+  bars,
+  connected,
+}: {
+  bars: number;
+  connected: boolean;
+}) {
+  const color = !connected
+    ? "#ffffff"
+    : bars === 3
+      ? "#22c55e"
+      : bars === 2
+        ? "#eab308"
+        : "#ef4444";
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      className="h-4 w-4 shrink-0"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+    >
+      <path d="M2.5 8.5a15 15 0 0 1 19 0" stroke={color} opacity={connected && bars < 3 ? 0.2 : 1} />
+      <path d="M6 12a10 10 0 0 1 12 0" stroke={color} opacity={connected && bars < 2 ? 0.2 : 1} />
+      <path d="M9.5 15.5a5 5 0 0 1 5 0" stroke={color} opacity={connected && bars < 1 ? 0.2 : 1} />
+      <circle cx="12" cy="19" r="1" fill={color} stroke={color} />
+      {!connected && <path d="M4 4l16 16" stroke="#ef4444" />}
+    </svg>
+  );
+}
 
 interface ChannelUnread {
   messageCount: number;
@@ -132,6 +165,8 @@ export default function ChatPage() {
   });
   const loadingOlderChannelRef = useRef(false);
   const [loadingOlderChannel, setLoadingOlderChannel] = useState(false);
+  const [connectionPing, setConnectionPing] = useState<number | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const dmNotificationAudioRef = useRef<HTMLAudioElement | null>(null);
   const doNotDisturbRef = useRef(false);
@@ -285,8 +320,38 @@ export default function ChatPage() {
   useEffect(() => {
     if (!user?.id) return;
     const socket = getSocket();
-    socket.connect();
-    socket.emit("user:connect", user.id);
+    setSocketConnected(socket.connected);
+    const handleSocketConnect = () => {
+      setSocketConnected(true);
+      socket.emit("user:connect", user.id);
+    };
+    const handleSocketDisconnect = () => {
+      setSocketConnected(false);
+      setConnectionPing(null);
+    };
+    const measureConnectionPing = () => {
+      if (!socket.connected) return;
+      const startedAt = performance.now();
+      socket.emit("connection:ping", () => {
+        setConnectionPing(Math.round(performance.now() - startedAt));
+      });
+    };
+    socket.on("connect", handleSocketConnect);
+    socket.on("disconnect", handleSocketDisconnect);
+    if (socket.connected) {
+      socket.emit("user:connect", user.id);
+      measureConnectionPing();
+    } else {
+      socket.connect();
+    }
+    const pingInterval = window.setInterval(() => {
+      if (!socket.connected) {
+        setSocketConnected(false);
+        setConnectionPing(null);
+        return;
+      }
+      measureConnectionPing();
+    }, 5000);
 
     const playNotificationSound = () => {
       if (doNotDisturbRef.current) return;
@@ -479,6 +544,8 @@ export default function ChatPage() {
 
     return () => {
       socket.off("message:receive", handleMessageReceive);
+      socket.off("connect", handleSocketConnect);
+      socket.off("disconnect", handleSocketDisconnect);
       socket.off("message:deleted", handleMessageDeleted);
       socket.off("poll:updated", handlePollUpdated);
       socket.off("message:error", handleMessageError);
@@ -491,6 +558,7 @@ export default function ChatPage() {
       socket.off("channel:updated", invalidateServer);
       socket.off("channel:deleted", invalidateServer);
       socket.off("server:banned", handleBanned);
+      window.clearInterval(pingInterval);
       socket.disconnect();
     };
   }, [user?.id, queryClient, toast]);
@@ -999,7 +1067,7 @@ export default function ChatPage() {
             <BrandLogo className="h-10 w-10 shrink-0 object-contain" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-bold tracking-tight">AHS Chat</p>
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Community server</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Titans Academy</p>
             </div>
             {user.isAdmin && (
               <Button
@@ -1216,9 +1284,18 @@ export default function ChatPage() {
             </div>
           </ScrollArea>
           <div className="border-t border-sidebar-border p-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Wifi className="h-3.5 w-3.5 text-status-online" />
-              <span>Real-time community chat</span>
+            <div className="flex items-center gap-2" aria-live="polite">
+              <ConnectionQualityIcon
+                connected={socketConnected}
+                bars={connectionPing === null ? 0 : connectionPing <= 150 ? 3 : connectionPing <= 400 ? 2 : 1}
+              />
+              <span>
+                {socketConnected && connectionPing !== null
+                  ? `${connectionPing} ms ping`
+                  : socketConnected
+                    ? "Checking ping..."
+                    : "No connection"}
+              </span>
             </div>
           </div>
         </aside>
