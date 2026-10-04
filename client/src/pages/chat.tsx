@@ -32,6 +32,7 @@ import type {
   DmConversationWithPeer,
   DmMessageWithSender,
   MessageReplyPreview,
+  MessagePage,
   Server,
   ServerMessageWithRelations,
   User,
@@ -68,6 +69,7 @@ interface ServerData {
 }
 
 const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls"]);
+const MESSAGE_PAGE_SIZE = 30;
 
 interface ChannelUnread {
   messageCount: number;
@@ -120,6 +122,16 @@ export default function ChatPage() {
   const selectedDmRef = useRef<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelScrollRestoreRef = useRef<{
+    element: HTMLElement;
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
+  const previousChannelMessagesRef = useRef<{ channelId: string | null; lastMessageId?: string }>({
+    channelId: null,
+  });
+  const loadingOlderChannelRef = useRef(false);
+  const [loadingOlderChannel, setLoadingOlderChannel] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const dmNotificationAudioRef = useRef<HTMLAudioElement | null>(null);
   const doNotDisturbRef = useRef(false);
@@ -159,12 +171,15 @@ export default function ChatPage() {
     !!activeChannel && activeChannel.name.trim().toLowerCase() === "polls";
   const canSendMessages = !!user && (!adminOnlyChannel || user.isAdmin);
 
-  const { data: messages = [], isLoading: messagesLoading } = useQuery<ServerMessageWithRelations[]>({
+  const { data: messagePage, isLoading: messagesLoading } = useQuery<
+    MessagePage<ServerMessageWithRelations>
+  >({
     queryKey: activeChannelId
       ? [`/api/channels/${activeChannelId}/messages`]
       : ["/api/channels/none/messages"],
     enabled: !!activeChannelId,
   });
+  const messages = messagePage?.messages || [];
 
   useEffect(() => {
     if (channels.length && (!selectedChannelId || !channels.some((channel) => channel.id === selectedChannelId))) {
@@ -307,15 +322,20 @@ export default function ChatPage() {
         });
       }
       if (message.channelId !== selectedChannelRef.current) return;
-      queryClient.setQueryData<ServerMessageWithRelations[]>(
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
         [`/api/channels/${message.channelId}/messages`],
-        (old = []) => (old.some((item) => item.id === message.id) ? old : [...old, message]),
+        (old) => {
+          if (!old || old.messages.some((item) => item.id === message.id)) return old;
+          return { ...old, messages: [...old.messages, message] };
+        },
       );
     };
     const handleMessageDeleted = ({ messageId }: { messageId: string }) => {
-      queryClient.setQueryData<ServerMessageWithRelations[]>(
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
         [`/api/channels/${selectedChannelRef.current}/messages`],
-        (old = []) => old.filter((message) => message.id !== messageId),
+        (old) => old
+          ? { ...old, messages: old.messages.filter((message) => message.id !== messageId) }
+          : old,
       );
     };
     const handlePollUpdated = ({
@@ -329,14 +349,18 @@ export default function ChatPage() {
       counts: number[];
       totalVoters: number;
     }) => {
-      queryClient.setQueryData<ServerMessageWithRelations[]>(
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
         [`/api/channels/${channelId}/messages`],
-        (old = []) =>
-          old.map((message) =>
-            message.id === messageId && message.pollResults
-              ? { ...message, pollResults: { ...message.pollResults, counts, totalVoters } }
-              : message,
-          ),
+        (old) => old
+          ? {
+              ...old,
+              messages: old.messages.map((message) =>
+                message.id === messageId && message.pollResults
+                  ? { ...message, pollResults: { ...message.pollResults, counts, totalVoters } }
+                  : message,
+              ),
+            }
+          : old,
       );
     };
     const handleTyping = ({
@@ -421,9 +445,12 @@ export default function ChatPage() {
           [conversationId]: (previous[conversationId] || 0) + 1,
         }));
       }
-      queryClient.setQueryData<DmMessageWithSender[]>(
+      queryClient.setQueryData<MessagePage<DmMessageWithSender>>(
         [`/api/dms/${conversationId}/messages`],
-        (old = []) => (old.some((item) => item.id === message.id) ? old : [...old, message]),
+        (old) => {
+          if (!old || old.messages.some((item) => item.id === message.id)) return old;
+          return { ...old, messages: [...old.messages, message] };
+        },
       );
       void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     };
@@ -464,8 +491,73 @@ export default function ChatPage() {
   }, [user?.id, queryClient, toast]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const previous = previousChannelMessagesRef.current;
+    const lastMessageId = messages[messages.length - 1]?.id;
+    const restore = channelScrollRestoreRef.current;
+    if (restore) {
+      const scrollHeightDelta = restore.element.scrollHeight - restore.scrollHeight;
+      restore.element.scrollTop = restore.scrollTop + scrollHeightDelta;
+      channelScrollRestoreRef.current = null;
+    } else if (previous.channelId !== activeChannelId || previous.lastMessageId !== lastMessageId) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    previousChannelMessagesRef.current = { channelId: activeChannelId, lastMessageId };
   }, [messages, activeChannelId]);
+
+  const loadOlderChannelMessages = async (element: HTMLElement) => {
+    if (
+      element.scrollTop > 40 ||
+      !messagePage?.hasMore ||
+      !activeChannelId ||
+      loadingOlderChannelRef.current ||
+      !messages.length
+    ) {
+      return;
+    }
+    const oldestMessage = messages[0];
+    if (!oldestMessage.createdAt) return;
+    loadingOlderChannelRef.current = true;
+    setLoadingOlderChannel(true);
+    channelScrollRestoreRef.current = {
+      element,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    };
+    const params = new URLSearchParams({
+      limit: String(MESSAGE_PAGE_SIZE),
+      beforeCreatedAt: new Date(oldestMessage.createdAt).toISOString(),
+      beforeId: oldestMessage.id,
+    });
+    try {
+      const olderPage: MessagePage<ServerMessageWithRelations> = await apiRequest(
+        `/api/channels/${activeChannelId}/messages?${params}`,
+        "GET",
+      );
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
+        [`/api/channels/${activeChannelId}/messages`],
+        (current) => {
+          if (!current) return olderPage;
+          const existingIds = new Set(current.messages.map((message) => message.id));
+          const olderMessages = olderPage.messages.filter((message) => !existingIds.has(message.id));
+          return {
+            hasMore: olderPage.hasMore,
+            messages: [...olderMessages, ...current.messages],
+          };
+        },
+      );
+      if (!olderPage.messages.length) channelScrollRestoreRef.current = null;
+    } catch (error: any) {
+      channelScrollRestoreRef.current = null;
+      toast({
+        title: "Couldn't load older messages",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      loadingOlderChannelRef.current = false;
+      setLoadingOlderChannel(false);
+    }
+  };
 
   useEffect(() => {
     const audio = new Audio("/dm-notification.mp3");
@@ -480,9 +572,11 @@ export default function ChatPage() {
   const deleteMessageMutation = useMutation({
     mutationFn: (messageId: string) => apiRequest(`/api/messages/${messageId}`, "DELETE"),
     onSuccess: (_, messageId) => {
-      queryClient.setQueryData<ServerMessageWithRelations[]>(
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
         [`/api/channels/${activeChannelId}/messages`],
-        (old = []) => old.filter((message) => message.id !== messageId),
+        (old) => old
+          ? { ...old, messages: old.messages.filter((message) => message.id !== messageId) }
+          : old,
       );
     },
     onError: (error: any) => {
@@ -507,11 +601,13 @@ export default function ChatPage() {
         "POST",
         poll,
       );
-      queryClient.setQueryData<ServerMessageWithRelations[]>(
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
         [`/api/channels/${activeChannelId}/messages`],
-        (old = []) => old.some((item) => item.id === message.id)
-          ? old.map((item) => item.id === message.id ? message : item)
-          : [...old, message],
+        (old) => !old
+          ? { messages: [message], hasMore: false }
+          : old.messages.some((item) => item.id === message.id)
+            ? { ...old, messages: old.messages.map((item) => item.id === message.id ? message : item) }
+            : { ...old, messages: [...old.messages, message] },
       );
       setPollCreateOpen(false);
     } catch (error: any) {
@@ -532,9 +628,11 @@ export default function ChatPage() {
         "POST",
         { optionIndexes },
       );
-      queryClient.setQueryData<ServerMessageWithRelations[]>(
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
         [`/api/channels/${message.channelId}/messages`],
-        (old = []) => old.map((item) => item.id === message.id ? message : item),
+        (old) => old
+          ? { ...old, messages: old.messages.map((item) => item.id === message.id ? message : item) }
+          : old,
       );
       return message;
     } catch (error: any) {
@@ -1181,8 +1279,16 @@ export default function ChatPage() {
                 </Button>
               </header>
 
-              <ScrollArea className="chat-content min-h-0 flex-1 px-4 py-6 sm:px-8">
+              <ScrollArea
+                className="chat-content min-h-0 flex-1 px-4 py-6 sm:px-8"
+                onScrollCapture={(event) => {
+                  void loadOlderChannelMessages(event.target as HTMLElement);
+                }}
+              >
                 <div className="mx-auto max-w-4xl">
+                  {loadingOlderChannel && (
+                    <p className="mb-4 text-center text-xs text-muted-foreground">Loading older messages...</p>
+                  )}
                   {messagesLoading ? (
                     <div className="space-y-4">
                       <div className="h-12 w-2/3 animate-pulse rounded-lg bg-muted" />

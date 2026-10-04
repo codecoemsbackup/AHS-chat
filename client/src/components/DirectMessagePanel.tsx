@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, MessageSquare, Send, X } from "lucide-react";
-import type { DmConversationWithPeer, DmMessageWithSender } from "@shared/schema";
+import type { DmConversationWithPeer, DmMessageWithSender, MessagePage } from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+
+const MESSAGE_PAGE_SIZE = 30;
 
 interface DirectMessagePanelProps {
   conversation: DmConversationWithPeer;
@@ -26,17 +28,92 @@ export default function DirectMessagePanel({
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollRestoreRef = useRef<{
+    element: HTMLElement;
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
+  const loadingOlderRef = useRef(false);
+  const previousMessagesRef = useRef<{ conversationId: string; lastMessageId?: string }>({
+    conversationId: conversation.id,
+  });
   const peerName = conversation.peer.username || conversation.peer.firstName || "Member";
   const messagesUrl = `/api/dms/${conversation.id}/messages`;
-  const { data: messages = [], isLoading } = useQuery<DmMessageWithSender[]>({
+  const { data: messagePage, isLoading } = useQuery<MessagePage<DmMessageWithSender>>({
     queryKey: [messagesUrl],
     enabled: conversation.status === "accepted",
   });
+  const messages = messagePage?.messages || [];
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const previous = previousMessagesRef.current;
+    const lastMessageId = messages[messages.length - 1]?.id;
+    const restore = scrollRestoreRef.current;
+    if (restore) {
+      restore.element.scrollTop =
+        restore.scrollTop + (restore.element.scrollHeight - restore.scrollHeight);
+      scrollRestoreRef.current = null;
+    } else if (
+      previous.conversationId !== conversation.id ||
+      previous.lastMessageId !== lastMessageId
+    ) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    previousMessagesRef.current = { conversationId: conversation.id, lastMessageId };
+  }, [messages, conversation.id]);
+
+  const loadOlderMessages = async (element: HTMLElement) => {
+    if (
+      element.scrollTop > 40 ||
+      !messagePage?.hasMore ||
+      loadingOlderRef.current ||
+      !messages.length
+    ) {
+      return;
+    }
+    const oldestMessage = messages[0];
+    if (!oldestMessage.createdAt) return;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    scrollRestoreRef.current = {
+      element,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    };
+    const params = new URLSearchParams({
+      limit: String(MESSAGE_PAGE_SIZE),
+      beforeCreatedAt: new Date(oldestMessage.createdAt).toISOString(),
+      beforeId: oldestMessage.id,
+    });
+    try {
+      const olderPage: MessagePage<DmMessageWithSender> = await apiRequest(
+        `${messagesUrl}?${params}`,
+        "GET",
+      );
+      queryClient.setQueryData<MessagePage<DmMessageWithSender>>(
+        [messagesUrl],
+        (current) => {
+          if (!current) return olderPage;
+          const existingIds = new Set(current.messages.map((message) => message.id));
+          const olderMessages = olderPage.messages.filter((message) => !existingIds.has(message.id));
+          return { hasMore: olderPage.hasMore, messages: [...olderMessages, ...current.messages] };
+        },
+      );
+      if (!olderPage.messages.length) scrollRestoreRef.current = null;
+    } catch (error: any) {
+      scrollRestoreRef.current = null;
+      toast({
+        title: "Couldn't load older messages",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  };
 
   const sendMessage = async () => {
     const content = draft.trim();
@@ -44,11 +121,16 @@ export default function DirectMessagePanel({
     setSending(true);
     setDraft("");
     try {
-      await apiRequest(messagesUrl, "POST", { content });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: [messagesUrl] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/dms"] }),
-      ]);
+      const message: DmMessageWithSender = await apiRequest(messagesUrl, "POST", { content });
+      queryClient.setQueryData<MessagePage<DmMessageWithSender>>(
+        [messagesUrl],
+        (current) => current
+          ? current.messages.some((item) => item.id === message.id)
+            ? current
+            : { ...current, messages: [...current.messages, message] }
+          : { messages: [message], hasMore: false },
+      );
+      await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     } catch (error: any) {
       setDraft((current) => current || content);
       toast({
@@ -85,8 +167,16 @@ export default function DirectMessagePanel({
 
       {conversation.status === "accepted" ? (
         <>
-          <ScrollArea className="min-h-0 flex-1 px-4 py-6 sm:px-8">
+          <ScrollArea
+            className="min-h-0 flex-1 px-4 py-6 sm:px-8"
+            onScrollCapture={(event) => {
+              void loadOlderMessages(event.target as HTMLElement);
+            }}
+          >
             <div className="mx-auto max-w-4xl">
+              {loadingOlder && (
+                <p className="mb-4 text-center text-xs text-muted-foreground">Loading older messages...</p>
+              )}
               {isLoading ? (
                 <div className="space-y-4">
                   <div className="h-12 w-2/3 animate-pulse rounded-lg bg-muted" />

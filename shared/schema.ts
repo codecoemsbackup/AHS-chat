@@ -91,7 +91,13 @@ export const serverMessages = pgTable("server_messages", {
   createdAt: timestamp("created_at").defaultNow(),
   deletedAt: timestamp("deleted_at"),
   deletedBy: varchar("deleted_by").references(() => users.id, { onDelete: "set null" }),
-});
+}, (table) => [
+  index("server_messages_channel_created_id_idx").on(
+    table.channelId,
+    table.createdAt,
+    table.id,
+  ),
+]);
 
 export const pollVotes = pgTable(
   "poll_votes",
@@ -156,7 +162,12 @@ export const dmMessages = pgTable(
     content: text("content").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [index("dm_messages_conversation_created_idx").on(table.conversationId, table.createdAt)],
+  (table) => [
+    index("dm_messages_conversation_created_idx").on(table.conversationId, table.createdAt),
+    index("dm_messages_conversation_created_id_idx").on(
+      table.conversationId, table.createdAt, table.id,
+    ),
+  ],
 );
 
 export const bannedUsers = pgTable("banned_users", {
@@ -307,6 +318,19 @@ export const voteOnPollSchema = z.object({
   }
 });
 
+export const messagePaginationSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(30),
+  beforeCreatedAt: z.string().datetime().optional(),
+  beforeId: z.string().min(1).max(100).optional(),
+}).superRefine(({ beforeCreatedAt, beforeId }, context) => {
+  if (Boolean(beforeCreatedAt) !== Boolean(beforeId)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Both cursor fields must be provided together",
+    });
+  }
+});
+
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Server = typeof servers.$inferSelect;
@@ -334,6 +358,11 @@ export type PollResults = {
   totalVoters: number;
   userOptionIndexes: number[];
 };
+export type MessagePage<T> = {
+  messages: T[];
+  hasMore: boolean;
+};
+export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;
 export type DmConversationWithPeer = DmConversation & {

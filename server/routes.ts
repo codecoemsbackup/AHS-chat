@@ -26,6 +26,7 @@ import {
   localLoginSchema,
   createPollSchema,
   voteOnPollSchema,
+  messagePaginationSchema,
 } from "@shared/schema";
 import {
   MAX_ATTACHMENT_BYTES,
@@ -502,12 +503,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const actor = await activeUser(req, res);
       if (!actor) return;
+      const pagination = messagePaginationSchema.parse(req.query);
       const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.status !== "accepted") {
         return res.status(403).json({ message: "Accept the message request before reading messages" });
       }
-      res.json(await storage.getDmMessages(conversation.id));
+      res.json(await storage.getDmMessages(conversation.id, pagination));
     } catch (error) {
       sendError(res, error, "Failed to fetch direct messages", 500);
     }
@@ -724,11 +726,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const actor = await activeUser(req, res);
         if (!actor) return;
+        const pagination = messagePaginationSchema.parse(req.query);
         const channel = await storage.getChannel(req.params.channelId);
         if (!channel || channel.serverId !== "main") {
           return res.status(404).json({ message: "Channel not found" });
         }
-        res.json(await storage.getChannelMessages(channel.id, 100, actor.id));
+        res.json(await storage.getChannelMessages(channel.id, pagination, actor.id));
       } catch (error) {
         sendError(res, error, "Failed to fetch messages", 500);
       }

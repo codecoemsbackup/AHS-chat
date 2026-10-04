@@ -17,12 +17,14 @@ import {
   type InsertServerMessage,
   type PollDefinition,
   type PollResults,
+  type MessagePage,
+  type MessagePagination,
   type DmConversation,
   type DmConversationWithPeer,
   type DmMessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 export const MAIN_SERVER_ID = "main";
 export const DEFAULT_CHANNEL_NAME = "general";
@@ -55,7 +57,11 @@ export interface IStorage {
   unbanUser(userId: string): Promise<void>;
   isUserBanned(userId: string): Promise<boolean>;
 
-  getChannelMessages(channelId: string, limit?: number, userId?: string): Promise<ServerMessageWithRelations[]>;
+  getChannelMessages(
+    channelId: string,
+    pagination: MessagePagination,
+    userId: string,
+  ): Promise<MessagePage<ServerMessageWithRelations>>;
   createPoll(channelId: string, senderId: string, pollData: PollDefinition): Promise<ServerMessageWithRelations>;
   voteOnPoll(messageId: string, userId: string, optionIndexes: number[]): Promise<ServerMessageWithRelations>;
   createMessage(message: InsertServerMessage & { senderId: string }): Promise<ServerMessageWithRelations>;
@@ -65,7 +71,10 @@ export interface IStorage {
   getDmConversation(conversationId: string, userId: string): Promise<DmConversationWithPeer | undefined>;
   createDmConversation(requesterId: string, peerId: string): Promise<DmConversationWithPeer>;
   respondToDmRequest(conversationId: string, userId: string, accepted: boolean): Promise<DmConversation | undefined>;
-  getDmMessages(conversationId: string, limit?: number): Promise<DmMessageWithSender[]>;
+  getDmMessages(
+    conversationId: string,
+    pagination: MessagePagination,
+  ): Promise<MessagePage<DmMessageWithSender>>;
   createDmMessage(conversationId: string, senderId: string, content: string): Promise<DmMessageWithSender>;
 }
 
@@ -235,6 +244,13 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS do_not_disturb boolean NOT NULL DEFAULT false`);
   }
 
+  async ensureMessagePaginationIndexes(): Promise<void> {
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS server_messages_channel_created_id_idx
+      ON server_messages (channel_id, created_at, id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS dm_messages_conversation_created_id_idx
+      ON dm_messages (conversation_id, created_at, id)`);
+  }
+
   async ensurePollsSchema(): Promise<void> {
     await db.execute(sql`ALTER TABLE server_messages ADD COLUMN IF NOT EXISTS poll_data jsonb`);
     await db.execute(sql`CREATE TABLE IF NOT EXISTS poll_votes (
@@ -363,23 +379,38 @@ export class DatabaseStorage implements IStorage {
 
   async getChannelMessages(
     channelId: string,
-    limit = 100,
-    userId?: string,
-  ): Promise<ServerMessageWithRelations[]> {
+    pagination: MessagePagination,
+    userId: string,
+  ): Promise<MessagePage<ServerMessageWithRelations>> {
+    const conditions = [
+      eq(serverMessages.channelId, channelId),
+      isNull(serverMessages.deletedAt),
+      sql`(
+        btrim(${serverMessages.content}) <> ''
+        OR ${serverMessages.attachmentUrl} IS NOT NULL
+      )`,
+    ];
+    if (pagination.beforeCreatedAt && pagination.beforeId) {
+      const beforeDate = new Date(pagination.beforeCreatedAt);
+      conditions.push(
+        or(
+          lt(serverMessages.createdAt, beforeDate),
+          and(
+            eq(serverMessages.createdAt, beforeDate),
+            lt(serverMessages.id, pagination.beforeId),
+          ),
+        )!,
+      );
+    }
     const messages = await db
       .select()
       .from(serverMessages)
-      .where(
-        sql`${serverMessages.channelId} = ${channelId}
-          AND ${serverMessages.deletedAt} IS NULL
-            AND (
-              btrim(${serverMessages.content}) <> ''
-              OR ${serverMessages.attachmentUrl} IS NOT NULL
-            )`,
-      )
-      .orderBy(desc(serverMessages.createdAt))
-      .limit(limit);
+      .where(and(...conditions))
+      .orderBy(desc(serverMessages.createdAt), desc(serverMessages.id))
+      .limit(pagination.limit + 1);
+    const hasMore = messages.length > pagination.limit;
     const visibleMessages = messages
+      .slice(0, pagination.limit)
       .filter(
         (message) =>
           message.content.replace(/[\s\u200B-\u200D\uFEFF]/g, "").length > 0 ||
@@ -398,7 +429,7 @@ export class DatabaseStorage implements IStorage {
       current.push(vote);
       votesByMessage.set(vote.messageId, current);
     }
-    return Promise.all(
+    const formattedMessages = await Promise.all(
       visibleMessages.map(async (message) => {
         const withReply = await this.withReplyPreview(message);
         if (!message.pollData) return withReply;
@@ -412,6 +443,7 @@ export class DatabaseStorage implements IStorage {
         };
       }),
     );
+    return { messages: formattedMessages, hasMore };
   }
 
   async createPoll(
@@ -660,23 +692,43 @@ export class DatabaseStorage implements IStorage {
     return conversation;
   }
 
-  async getDmMessages(conversationId: string, limit = 100): Promise<DmMessageWithSender[]> {
+  async getDmMessages(
+    conversationId: string,
+    pagination: MessagePagination,
+  ): Promise<MessagePage<DmMessageWithSender>> {
+    const conditions = [eq(dmMessages.conversationId, conversationId)];
+    if (pagination.beforeCreatedAt && pagination.beforeId) {
+      const beforeDate = new Date(pagination.beforeCreatedAt);
+      conditions.push(
+        or(
+          lt(dmMessages.createdAt, beforeDate),
+          and(
+            eq(dmMessages.createdAt, beforeDate),
+            lt(dmMessages.id, pagination.beforeId),
+          ),
+        )!,
+      );
+    }
     const rows = await db
       .select({ message: dmMessages, sender: users })
       .from(dmMessages)
       .innerJoin(users, eq(users.id, dmMessages.senderId))
-      .where(eq(dmMessages.conversationId, conversationId))
-      .orderBy(desc(dmMessages.createdAt))
-      .limit(limit);
-    return rows.reverse().map(({ message, sender }) => ({
-      ...message,
-      sender: {
-        id: sender.id,
-        username: sender.username,
-        firstName: sender.firstName,
-        profileImageUrl: sender.profileImageUrl,
-      },
-    }));
+      .where(and(...conditions))
+      .orderBy(desc(dmMessages.createdAt), desc(dmMessages.id))
+      .limit(pagination.limit + 1);
+    const hasMore = rows.length > pagination.limit;
+    return {
+      messages: rows.slice(0, pagination.limit).reverse().map(({ message, sender }) => ({
+        ...message,
+        sender: {
+          id: sender.id,
+          username: sender.username,
+          firstName: sender.firstName,
+          profileImageUrl: sender.profileImageUrl,
+        },
+      })),
+      hasMore,
+    };
   }
 
   async createDmMessage(
