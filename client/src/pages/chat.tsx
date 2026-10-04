@@ -359,6 +359,27 @@ export default function ChatPage() {
     const invalidateServer = () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/server"] });
     };
+    const handleMemberStatus = ({
+      userId,
+      status,
+    }: {
+      userId: string;
+      status: "online" | "offline";
+    }) => {
+      void queryClient.cancelQueries({ queryKey: ["/api/server"] }).then(() => {
+        const serverData = queryClient.getQueryData<ServerData>(["/api/server"]);
+        if (!serverData) {
+          invalidateServer();
+          return;
+        }
+        queryClient.setQueryData<ServerData>(["/api/server"], {
+          ...serverData,
+          members: serverData.members.map((member) =>
+            member.id === userId ? { ...member, status } : member,
+          ),
+        });
+      });
+    };
     const handleMemberUpdated = (payload: Partial<User> & { userId?: string }) => {
       invalidateServer();
       void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
@@ -417,7 +438,7 @@ export default function ChatPage() {
     socket.on("dm:message", handleDmMessage);
     socket.on("dm:updated", handleDmUpdated);
     socket.on("member:typing", handleTyping);
-    socket.on("member:status", invalidateServer);
+    socket.on("member:status", handleMemberStatus);
     socket.on("member:updated", handleMemberUpdated);
     socket.on("channel:created", invalidateServer);
     socket.on("channel:updated", invalidateServer);
@@ -432,7 +453,7 @@ export default function ChatPage() {
       socket.off("dm:message", handleDmMessage);
       socket.off("dm:updated", handleDmUpdated);
       socket.off("member:typing", handleTyping);
-      socket.off("member:status", invalidateServer);
+      socket.off("member:status", handleMemberStatus);
       socket.off("member:updated", handleMemberUpdated);
       socket.off("channel:created", invalidateServer);
       socket.off("channel:updated", invalidateServer);
