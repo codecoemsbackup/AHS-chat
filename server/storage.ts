@@ -205,6 +205,25 @@ export class DatabaseStorage implements IStorage {
         position: 0,
       });
     }
+    const [staff] = await db
+      .select({ id: channels.id })
+      .from(channels)
+      .where(sql`${channels.serverId} = ${MAIN_SERVER_ID} AND lower(btrim(${channels.name})) = 'staff'`)
+      .limit(1);
+    if (!staff) {
+      const [lastChannel] = await db
+        .select({ position: channels.position })
+        .from(channels)
+        .where(eq(channels.serverId, MAIN_SERVER_ID))
+        .orderBy(desc(channels.position))
+        .limit(1);
+      await db.insert(channels).values({
+        serverId: MAIN_SERVER_ID,
+        name: "staff",
+        description: "Private chat for server staff.",
+        position: (lastChannel?.position ?? 0) + 1,
+      });
+    }
     await this.claimOwnerIfNeeded();
     const [server] = await db.select().from(servers).where(eq(servers.id, MAIN_SERVER_ID));
     return server;
@@ -300,6 +319,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createChannel(name: string, description?: string): Promise<Channel> {
+    if (name.trim().toLowerCase() === "staff") {
+      throw new Error("The staff channel is reserved");
+    }
     const existing = await db
       .select({ position: channels.position })
       .from(channels)
@@ -319,6 +341,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateChannel(channelId: string, name: string, description?: string): Promise<Channel> {
+    if (name.trim().toLowerCase() === "staff") {
+      throw new Error("The staff channel name is reserved");
+    }
+    const existingChannel = await this.getChannel(channelId);
+    if (existingChannel?.name.trim().toLowerCase() === "staff") {
+      throw new Error("The staff channel cannot be renamed");
+    }
     const [channel] = await db
       .update(channels)
       .set({ name, description: description || null, updatedAt: new Date() })
@@ -332,6 +361,9 @@ export class DatabaseStorage implements IStorage {
     if (!channel) throw new Error("Channel not found");
     if (channel.name.toLowerCase() === DEFAULT_CHANNEL_NAME) {
       throw new Error("The general channel cannot be deleted");
+    }
+    if (channel.name.trim().toLowerCase() === "staff") {
+      throw new Error("The staff channel cannot be deleted");
     }
     await db.delete(channels).where(eq(channels.id, channelId));
   }

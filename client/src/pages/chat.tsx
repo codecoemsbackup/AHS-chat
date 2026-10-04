@@ -6,6 +6,7 @@ import {
   Megaphone,
   LockKeyhole,
   Vote,
+  UsersRound,
   LogOut,
   MessageSquare,
   Search,
@@ -67,7 +68,7 @@ interface ServerData {
   members: ServerMember[];
 }
 
-const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls"]);
+const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls", "staff"]);
 const MESSAGE_PAGE_SIZE = 30;
 
 function ConnectionQualityIcon({
@@ -123,6 +124,10 @@ function isAnnouncementsChannel(channelName: string) {
 
 function isPollsChannel(channelName: string) {
   return channelName.trim().toLowerCase() === "polls";
+}
+
+function isStaffChannel(channelName: string) {
+  return channelName.trim().toLowerCase() === "staff";
 }
 
 export default function ChatPage() {
@@ -189,10 +194,11 @@ export default function ChatPage() {
       ["announcements", 1],
       ["polls", 2],
       ["general", 3],
+      ["staff", 4],
     ]);
     return [...channels].sort((a, b) => {
-      const aOrder = displayOrder.get(a.name.trim().toLowerCase()) ?? 3;
-      const bOrder = displayOrder.get(b.name.trim().toLowerCase()) ?? 3;
+      const aOrder = displayOrder.get(a.name.trim().toLowerCase()) ?? 5;
+      const bOrder = displayOrder.get(b.name.trim().toLowerCase()) ?? 5;
       return aOrder - bOrder || a.position - b.position;
     });
   }, [channels]);
@@ -478,6 +484,20 @@ export default function ChatPage() {
       invalidateServer();
       void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
       if (payload.id === user.id || payload.userId === user.id) {
+        if (payload.isAdmin === false) {
+          const staffChannel = queryClient
+            .getQueryData<ServerData>(["/api/server"])
+            ?.channels.find((channel) => isStaffChannel(channel.name));
+          if (staffChannel) {
+            void queryClient.removeQueries({
+              queryKey: [`/api/channels/${staffChannel.id}/messages`],
+              exact: true,
+            });
+            if (selectedChannelRef.current === staffChannel.id) {
+              setSelectedChannelId(null);
+            }
+          }
+        }
         void queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       }
     };
@@ -1200,6 +1220,8 @@ export default function ChatPage() {
                       <Megaphone className="h-4 w-4" aria-hidden="true" />
                     ) : isPollsChannel(channel.name) ? (
                       <Vote className="h-4 w-4" aria-hidden="true" />
+                    ) : isStaffChannel(channel.name) ? (
+                      <UsersRound className="h-4 w-4" aria-hidden="true" />
                     ) : (
                       <Hash className="h-4 w-4" />
                     )}
@@ -1321,6 +1343,8 @@ export default function ChatPage() {
                     <Megaphone className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   ) : isPollsChannel(activeChannel.name) ? (
                     <Vote className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                  ) : isStaffChannel(activeChannel.name) ? (
+                    <UsersRound className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   ) : (
                     <Hash className="h-5 w-5 text-muted-foreground" />
                   )}

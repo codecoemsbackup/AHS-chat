@@ -38,7 +38,12 @@ import {
 } from "./fileUploads";
 
 const SERVER_ROOM = "server:main";
+const STAFF_ROOM = "server:main:staff";
 const connectedUsers = new Map<string, string>();
+
+function isStaffChannel(channelName: string) {
+  return channelName.trim().toLowerCase() === "staff";
+}
 
 function publicUser(user: any) {
   const { passwordHash: _passwordHash, ...safeUser } = user;
@@ -430,7 +435,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getChannels(),
         storage.getMembers(),
       ]);
-    res.json({ server, channels, members: members.map(publicUser) });
+      res.json({
+        server,
+        channels: actor.isAdmin
+          ? channels
+          : channels.filter((channel) => !isStaffChannel(channel.name)),
+        members: members.map(publicUser),
+      });
     } catch (error) {
       sendError(res, error, "Failed to fetch server", 500);
     }
@@ -548,6 +559,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!(await adminUser(req, res))) return;
       const parsed = updateChannelSchema.parse(req.body);
+      if (isStaffChannel(parsed.name)) {
+        return res.status(400).json({ message: "The staff channel name is reserved" });
+      }
       const channel = await storage.createChannel(parsed.name, parsed.description);
       ioFor(app)?.to(SERVER_ROOM).emit("channel:created", channel);
       res.status(201).json(channel);
@@ -563,6 +577,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const channel = await storage.getChannel(req.params.channelId);
       if (!channel || channel.serverId !== "main") {
         return res.status(404).json({ message: "Channel not found" });
+      }
+      if (isStaffChannel(channel.name) || isStaffChannel(parsed.name)) {
+        return res.status(400).json({ message: "The staff channel cannot be renamed" });
       }
       if (
         channel.name.toLowerCase() === "general" &&
@@ -588,6 +605,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const channel = await storage.getChannel(req.params.channelId);
       if (!channel || channel.serverId !== "main") {
         return res.status(404).json({ message: "Channel not found" });
+      }
+      if (isStaffChannel(channel.name)) {
+        return res.status(400).json({ message: "The staff channel cannot be deleted" });
       }
       await storage.deleteChannel(channel.id);
       ioFor(app)?.to(SERVER_ROOM).emit("channel:deleted", { channelId: channel.id });
@@ -637,6 +657,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const parsed = updateAdminSchema.parse(req.body);
         const user = await storage.updateAdmin(target.id, parsed.isAdmin);
+        const targetSocketId = connectedUsers.get(target.id);
+        const targetSocket = targetSocketId
+          ? ioFor(app)?.sockets.sockets.get(targetSocketId)
+          : undefined;
+        if (parsed.isAdmin) targetSocket?.join(STAFF_ROOM);
+        else targetSocket?.leave(STAFF_ROOM);
         ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
         res.json(publicUser(user));
       } catch (error: any) {
@@ -728,7 +754,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!actor) return;
         const pagination = messagePaginationSchema.parse(req.query);
         const channel = await storage.getChannel(req.params.channelId);
-        if (!channel || channel.serverId !== "main") {
+        if (
+          !channel ||
+          channel.serverId !== "main" ||
+          (isStaffChannel(channel.name) && !actor.isAdmin)
+        ) {
           return res.status(404).json({ message: "Channel not found" });
         }
         res.json(
@@ -817,8 +847,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const actor = await adminUser(req, res);
         if (!actor) return;
+        const channel = await storage.getChannelForMessage(req.params.messageId);
+        if (!channel) return res.status(404).json({ message: "Message not found" });
         await storage.deleteMessage(req.params.messageId, actor.id);
-        ioFor(app)?.to(SERVER_ROOM).emit("message:deleted", {
+        ioFor(app)?.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:deleted", {
           messageId: req.params.messageId,
         });
         res.json({ success: true });
@@ -861,6 +893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       socket.data.userId = userId;
       socket.join(SERVER_ROOM);
       socket.join(`user:${userId}`);
+      if (user.isAdmin) socket.join(STAFF_ROOM);
       await storage.updateUserStatus(userId, "online");
       io.to(SERVER_ROOM).emit("member:status", { userId, status: "online" });
       socket.emit("connected", { userId });
@@ -874,7 +907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const channel = await storage.getChannel(parsed.channelId);
         if (!channel || channel.serverId !== "main") return;
         const sender = await storage.getUser(userId);
-        const adminOnlyChannel = ["rules", "announcements", "polls"].includes(
+        const adminOnlyChannel = ["rules", "announcements", "polls", "staff"].includes(
           channel.name.trim().toLowerCase(),
         );
         if (!sender || (adminOnlyChannel && !sender.isAdmin)) {
@@ -907,21 +940,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mentionUserIds: validMentionUserIds,
           senderId: userId,
         });
-        io.to(SERVER_ROOM).emit("message:receive", message);
+        io.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:receive", message);
       } catch (error) {
         console.error("Error sending message:", error);
         socket.emit("message:error", { error: "Failed to send message" });
       }
     });
 
-    socket.on("typing:start", ({ channelId }: { channelId: string }) => {
+    socket.on("typing:start", async ({ channelId }: { channelId: string }) => {
       const userId = socket.data.userId;
-      if (userId) socket.to(SERVER_ROOM).emit("member:typing", { userId, channelId, typing: true });
+      if (!userId) return;
+      const channel = await storage.getChannel(channelId);
+      if (!channel || (isStaffChannel(channel.name) && !socket.rooms.has(STAFF_ROOM))) return;
+      const room = isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM;
+      socket.to(room).emit("member:typing", { userId, channelId, typing: true });
     });
 
-    socket.on("typing:stop", ({ channelId }: { channelId: string }) => {
+    socket.on("typing:stop", async ({ channelId }: { channelId: string }) => {
       const userId = socket.data.userId;
-      if (userId) socket.to(SERVER_ROOM).emit("member:typing", { userId, channelId, typing: false });
+      if (!userId) return;
+      const channel = await storage.getChannel(channelId);
+      if (!channel || (isStaffChannel(channel.name) && !socket.rooms.has(STAFF_ROOM))) return;
+      const room = isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM;
+      socket.to(room).emit("member:typing", { userId, channelId, typing: false });
     });
 
     socket.on("disconnect", async () => {
