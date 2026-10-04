@@ -17,6 +17,7 @@ import {
   type InsertServerMessage,
   type PollDefinition,
   type PollResults,
+  type PollVoter,
   type MessagePage,
   type MessagePagination,
   type DmConversation,
@@ -61,9 +62,20 @@ export interface IStorage {
     channelId: string,
     pagination: MessagePagination,
     userId: string,
+    includeVoters?: boolean,
   ): Promise<MessagePage<ServerMessageWithRelations>>;
-  createPoll(channelId: string, senderId: string, pollData: PollDefinition): Promise<ServerMessageWithRelations>;
-  voteOnPoll(messageId: string, userId: string, optionIndexes: number[]): Promise<ServerMessageWithRelations>;
+  createPoll(
+    channelId: string,
+    senderId: string,
+    pollData: PollDefinition,
+    includeVoters?: boolean,
+  ): Promise<ServerMessageWithRelations>;
+  voteOnPoll(
+    messageId: string,
+    userId: string,
+    optionIndexes: number[],
+    includeVoters?: boolean,
+  ): Promise<ServerMessageWithRelations>;
   createMessage(message: InsertServerMessage & { senderId: string }): Promise<ServerMessageWithRelations>;
   deleteMessage(messageId: string, deletedBy: string): Promise<void>;
 
@@ -381,6 +393,7 @@ export class DatabaseStorage implements IStorage {
     channelId: string,
     pagination: MessagePagination,
     userId: string,
+    includeVoters = false,
   ): Promise<MessagePage<ServerMessageWithRelations>> {
     const conditions = [
       eq(serverMessages.channelId, channelId),
@@ -421,7 +434,17 @@ export class DatabaseStorage implements IStorage {
       .filter((message) => message.pollData)
       .map((message) => message.id);
     const votes = pollMessageIds.length
-      ? await db.select().from(pollVotes).where(inArray(pollVotes.messageId, pollMessageIds))
+      ? await db
+          .select({
+            userId: pollVotes.userId,
+            messageId: pollVotes.messageId,
+            optionIndex: pollVotes.optionIndex,
+            username: users.username,
+            firstName: users.firstName,
+          })
+          .from(pollVotes)
+          .innerJoin(users, eq(users.id, pollVotes.userId))
+          .where(inArray(pollVotes.messageId, pollMessageIds))
       : [];
     const votesByMessage = new Map<string, typeof votes>();
     for (const vote of votes) {
@@ -439,6 +462,7 @@ export class DatabaseStorage implements IStorage {
             message.pollData,
             votesByMessage.get(message.id) || [],
             userId,
+            includeVoters,
           ),
         };
       }),
@@ -450,6 +474,7 @@ export class DatabaseStorage implements IStorage {
     channelId: string,
     senderId: string,
     pollData: PollDefinition,
+    includeVoters = false,
   ): Promise<ServerMessageWithRelations> {
     const [message] = await db
       .insert(serverMessages)
@@ -460,13 +485,14 @@ export class DatabaseStorage implements IStorage {
         pollData,
       })
       .returning();
-    return this.getPollMessage(message, senderId);
+    return this.getPollMessage(message, senderId, includeVoters);
   }
 
   async voteOnPoll(
     messageId: string,
     userId: string,
     optionIndexes: number[],
+    includeVoters = false,
   ): Promise<ServerMessageWithRelations> {
     const [message] = await db
       .select()
@@ -488,39 +514,67 @@ export class DatabaseStorage implements IStorage {
         optionIndexes.map((optionIndex) => ({ messageId, userId, optionIndex })),
       );
     });
-    return this.getPollMessage(message, userId);
+    return this.getPollMessage(message, userId, includeVoters);
   }
 
   private async getPollMessage(
     message: ServerMessage,
     userId?: string,
+    includeVoters = false,
   ): Promise<ServerMessageWithRelations> {
     const [withReply, votes] = await Promise.all([
       this.withReplyPreview(message),
-      db.select().from(pollVotes).where(eq(pollVotes.messageId, message.id)),
+      db
+        .select({
+          userId: pollVotes.userId,
+          optionIndex: pollVotes.optionIndex,
+          username: users.username,
+          firstName: users.firstName,
+        })
+        .from(pollVotes)
+        .innerJoin(users, eq(users.id, pollVotes.userId))
+        .where(eq(pollVotes.messageId, message.id)),
     ]);
     if (!message.pollData) return withReply;
     return {
       ...withReply,
-      pollResults: this.buildPollResults(message.pollData, votes, userId),
+      pollResults: this.buildPollResults(message.pollData, votes, userId, includeVoters),
     };
   }
 
   private buildPollResults(
     pollData: PollDefinition,
-    votes: Array<{ userId: string; optionIndex: number }>,
+    votes: Array<{
+      userId: string;
+      optionIndex: number;
+      username: string | null;
+      firstName: string | null;
+    }>,
     userId?: string,
+    includeVoters = false,
   ): PollResults {
     const counts = pollData.options.map(() => 0);
     const userOptionIndexes: number[] = [];
     const voters = new Set<string>();
+    const votersByOption: PollVoter[][] = pollData.options.map(() => []);
     for (const vote of votes) {
       if (vote.optionIndex < 0 || vote.optionIndex >= counts.length) continue;
       counts[vote.optionIndex] += 1;
       voters.add(vote.userId);
       if (vote.userId === userId) userOptionIndexes.push(vote.optionIndex);
+      if (includeVoters) {
+        votersByOption[vote.optionIndex].push({
+          userId: vote.userId,
+          name: vote.username || vote.firstName || "Member",
+        });
+      }
     }
-    return { counts, totalVoters: voters.size, userOptionIndexes };
+    return {
+      counts,
+      totalVoters: voters.size,
+      userOptionIndexes,
+      ...(includeVoters ? { votersByOption } : {}),
+    };
   }
 
   async createMessage(

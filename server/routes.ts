@@ -731,7 +731,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!channel || channel.serverId !== "main") {
           return res.status(404).json({ message: "Channel not found" });
         }
-        res.json(await storage.getChannelMessages(channel.id, pagination, actor.id));
+        res.json(
+          await storage.getChannelMessages(
+            channel.id,
+            pagination,
+            actor.id,
+            actor.isAdmin,
+          ),
+        );
       } catch (error) {
         sendError(res, error, "Failed to fetch messages", 500);
       }
@@ -758,7 +765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           question: parsed.question,
           options: parsed.options,
           allowMultiple: parsed.allowMultiple,
-        });
+        }, actor.isAdmin);
         ioFor(app)?.to(SERVER_ROOM).emit("message:receive", message);
         res.status(201).json(message);
       } catch (error) {
@@ -784,7 +791,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Poll not found" });
         }
         const parsed = voteOnPollSchema.parse(req.body);
-        const message = await storage.voteOnPoll(messageId, actor.id, parsed.optionIndexes);
+        const message = await storage.voteOnPoll(
+          messageId,
+          actor.id,
+          parsed.optionIndexes,
+          actor.isAdmin,
+        );
         ioFor(app)?.to(SERVER_ROOM).emit("poll:updated", {
           channelId: message.channelId,
           messageId: message.id,

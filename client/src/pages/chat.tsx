@@ -362,6 +362,11 @@ export default function ChatPage() {
             }
           : old,
       );
+      if (user.isAdmin) {
+        void queryClient.invalidateQueries({
+          queryKey: [`/api/channels/${channelId}/messages`],
+        });
+      }
     };
     const handleTyping = ({
       userId,
@@ -1358,6 +1363,7 @@ export default function ChatPage() {
                                 : "Now"
                             }
                             canDelete={user.isAdmin}
+                            canViewVoters={user.isAdmin}
                             onDelete={() => deleteMessageMutation.mutate(message.id)}
                             onReply={() =>
                               setReplyingTo({

@@ -357,6 +357,11 @@ export type PollResults = {
   counts: number[];
   totalVoters: number;
   userOptionIndexes: number[];
+  votersByOption?: PollVoter[][];
+};
+export type PollVoter = {
+  userId: string;
+  name: string;
 };
 export type MessagePage<T> = {
   messages: T[];

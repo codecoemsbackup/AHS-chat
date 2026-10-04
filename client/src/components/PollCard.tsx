@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ListChecks, Reply, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, ListChecks, Reply, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PollDefinition, PollResults, ServerMessageWithRelations } from "@shared/schema";
 
@@ -9,6 +9,7 @@ interface PollCardProps {
   senderName: string;
   timestamp: string;
   canDelete?: boolean;
+  canViewVoters?: boolean;
   onDelete?: () => void;
   onReply?: () => void;
   onVote: (optionIndexes: number[]) => Promise<ServerMessageWithRelations | undefined>;
@@ -20,12 +21,14 @@ export default function PollCard({
   senderName,
   timestamp,
   canDelete = false,
+  canViewVoters = false,
   onDelete,
   onReply,
   onVote,
 }: PollCardProps) {
   const [selectedOptions, setSelectedOptions] = useState<number[]>(results.userOptionIndexes);
   const [isSaving, setIsSaving] = useState(false);
+  const [votersExpanded, setVotersExpanded] = useState(false);
   const totalVoters = results.totalVoters;
   const hasVoted = results.userOptionIndexes.length > 0;
 
@@ -73,7 +76,22 @@ export default function PollCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-muted-foreground">{senderName} created a poll</p>
-          <h3 className="mt-1 break-words font-semibold">{poll.question}</h3>
+          {canViewVoters ? (
+            <button
+              type="button"
+              className="mt-1 flex w-full items-center justify-between gap-2 text-left font-semibold hover:text-primary"
+              onClick={() => setVotersExpanded((expanded) => !expanded)}
+              aria-expanded={votersExpanded}
+              aria-label={`${votersExpanded ? "Hide" : "Show"} who voted in ${poll.question}`}
+            >
+              <span className="break-words">{poll.question}</span>
+              {votersExpanded
+                ? <ChevronUp className="h-4 w-4 shrink-0" />
+                : <ChevronDown className="h-4 w-4 shrink-0" />}
+            </button>
+          ) : (
+            <h3 className="mt-1 break-words font-semibold">{poll.question}</h3>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             {poll.allowMultiple ? "Select all that apply" : "Choose one"}
           </p>
@@ -121,6 +139,36 @@ export default function PollCard({
           );
         })}
       </div>
+      {canViewVoters && votersExpanded && (
+        <div className="mt-4 space-y-3 border-t pt-3">
+          <h4 className="text-sm font-semibold">Votes by answer</h4>
+          {poll.options.map((option, index) => {
+            const voters = results.votersByOption?.[index] || [];
+            return (
+              <section key={`${option}-voters-${index}`} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-medium">{option}</span>
+                  <span className="text-xs text-muted-foreground">{voters.length}</span>
+                </div>
+                {voters.length ? (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {voters.map((voter) => (
+                      <li
+                        key={voter.userId}
+                        className="rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary"
+                      >
+                        {voter.name}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No votes yet</p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">
           {totalVoters} {totalVoters === 1 ? "vote" : "votes"} · {timestamp}
