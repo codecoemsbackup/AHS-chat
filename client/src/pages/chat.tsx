@@ -202,6 +202,8 @@ export default function ChatPage() {
       return aOrder - bOrder || a.position - b.position;
     });
   }, [channels]);
+  const regularChannels = orderedChannels.filter((channel) => !isStaffChannel(channel.name));
+  const staffChannels = orderedChannels.filter((channel) => isStaffChannel(channel.name));
   const defaultChannel =
     channels.find((channel) => channel.name.trim().toLowerCase() === "general") || channels[0];
   const activeChannelId = selectedChannelId || defaultChannel?.id || null;
@@ -908,6 +910,59 @@ export default function ChatPage() {
         Boolean(message.attachmentUrl),
     );
 
+  const renderChannel = (channel: Channel) => (
+    <button
+      key={channel.id}
+      type="button"
+      onClick={() => {
+        setSelectedDmId(null);
+        setSelectedChannelId(channel.id);
+      }}
+      data-active={activeChannelId === channel.id}
+      className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
+        activeChannelId === channel.id
+          ? "font-semibold"
+          : "text-muted-foreground hover:bg-sidebar-accent/65 hover:text-sidebar-accent-foreground"
+      }`}
+    >
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+        {isRulesChannel(channel.name) ? (
+          <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+        ) : isAnnouncementsChannel(channel.name) ? (
+          <Megaphone className="h-4 w-4" aria-hidden="true" />
+        ) : isPollsChannel(channel.name) ? (
+          <Vote className="h-4 w-4" aria-hidden="true" />
+        ) : isStaffChannel(channel.name) ? (
+          <UsersRound className="h-4 w-4" aria-hidden="true" />
+        ) : (
+          <Hash className="h-4 w-4" />
+        )}
+        {isAdminOnlyChannel(channel.name) && (
+          <LockKeyhole
+            className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-sidebar text-status-busy"
+            aria-label="Admins only"
+          />
+        )}
+        {(channelUnread[channel.id]?.mentionCount || 0) > 0 ? (
+          <span
+            className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+            aria-label={`${channelUnread[channel.id].mentionCount} unread mention${channelUnread[channel.id].mentionCount === 1 ? "" : "s"}`}
+          >
+            {channelUnread[channel.id].mentionCount > 99
+              ? "99+"
+              : channelUnread[channel.id].mentionCount}
+          </span>
+        ) : (channelUnread[channel.id]?.messageCount || 0) > 0 ? (
+          <span
+            className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-white"
+            aria-label="Unread messages"
+          />
+        ) : null}
+      </span>
+      <span className="truncate">{channel.name}</span>
+    </button>
+  );
+
   const openDirectMessage = async (member: ServerMember) => {
     const existing = dmConversations.find((conversation) => conversation.peer.id === member.id);
     if (existing) {
@@ -1198,58 +1253,16 @@ export default function ChatPage() {
           </div>
           <ScrollArea className="min-h-0 flex-1 px-2">
             <div className="space-y-1">
-              {orderedChannels.map((channel) => (
-                <button
-                  key={channel.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDmId(null);
-                    setSelectedChannelId(channel.id);
-                  }}
-                  data-active={activeChannelId === channel.id}
-                  className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
-                    activeChannelId === channel.id
-                      ? "font-semibold"
-                      : "text-muted-foreground hover:bg-sidebar-accent/65 hover:text-sidebar-accent-foreground"
-                  }`}
-                >
-                  <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-                    {isRulesChannel(channel.name) ? (
-                      <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-                    ) : isAnnouncementsChannel(channel.name) ? (
-                      <Megaphone className="h-4 w-4" aria-hidden="true" />
-                    ) : isPollsChannel(channel.name) ? (
-                      <Vote className="h-4 w-4" aria-hidden="true" />
-                    ) : isStaffChannel(channel.name) ? (
-                      <UsersRound className="h-4 w-4" aria-hidden="true" />
-                    ) : (
-                      <Hash className="h-4 w-4" />
-                    )}
-                    {isAdminOnlyChannel(channel.name) && (
-                      <LockKeyhole
-                        className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-sidebar text-status-busy"
-                        aria-label="Admins only"
-                      />
-                    )}
-                    {(channelUnread[channel.id]?.mentionCount || 0) > 0 ? (
-                      <span
-                        className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
-                        aria-label={`${channelUnread[channel.id].mentionCount} unread mention${channelUnread[channel.id].mentionCount === 1 ? "" : "s"}`}
-                      >
-                        {channelUnread[channel.id].mentionCount > 99
-                          ? "99+"
-                          : channelUnread[channel.id].mentionCount}
-                      </span>
-                    ) : (channelUnread[channel.id]?.messageCount || 0) > 0 ? (
-                      <span
-                        className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-sidebar bg-white"
-                        aria-label="Unread messages"
-                      />
-                    ) : null}
-                  </span>
-                  <span className="truncate">{channel.name}</span>
-                </button>
-              ))}
+              {regularChannels.map(renderChannel)}
+              {user.isAdmin && staffChannels.length > 0 && (
+                <>
+                  <div className="mb-1 mt-5 flex items-center gap-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    <span>Staff</span>
+                    <span className="h-px flex-1 bg-sidebar-border" />
+                  </div>
+                  <div className="space-y-1">{staffChannels.map(renderChannel)}</div>
+                </>
+              )}
             </div>
             <div className="mb-2 mt-6 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               <span>Direct messages</span>
