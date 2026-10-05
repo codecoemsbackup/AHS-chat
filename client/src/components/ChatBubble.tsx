@@ -6,6 +6,27 @@ import { formatFileSize } from "@/lib/fileUploads";
 import type { MessageReactionSummary, MessageReplyPreview } from "@shared/schema";
 import MessageReactions from "@/components/MessageReactions";
 
+function getGifLinks(message: string): string[] {
+  const links = new Set<string>();
+  const urlPattern = /https?:\/\/[^\s<>]+/gi;
+  let match: RegExpExecArray | null;
+  while ((match = urlPattern.exec(message)) !== null) {
+    const url = match[0].replace(/[),.!?;:\]]+$/, "");
+    try {
+      const parsed = new URL(url);
+      const isGifFile = /\.gif$/i.test(parsed.pathname);
+      const isGifCdn =
+        parsed.hostname === "media.tenor.com" ||
+        parsed.hostname === "media.giphy.com" ||
+        /^media\d+\.giphy\.com$/i.test(parsed.hostname);
+      if (isGifFile || isGifCdn) links.add(url);
+    } catch {
+      continue;
+    }
+  }
+  return Array.from(links);
+}
+
 interface ChatBubbleProps {
   message: string;
   timestamp: string;
@@ -52,6 +73,7 @@ export default function ChatBubble({
     ? new RegExp(`(@(?:${escapedMentionNames.join("|")}))(?=\\b|\\s|$|[.,!?])`, "gi")
     : null;
   const messageParts = mentionPattern ? message.split(mentionPattern) : [message];
+  const gifLinks = getGifLinks(message);
 
   return (
     <div
@@ -115,6 +137,24 @@ export default function ChatBubble({
                   <Fragment key={`${part}-${index}`}>{part}</Fragment>
                 );
               })}
+              {gifLinks.map((url) => (
+                <Fragment key={url}>
+                  <br />
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Open GIF"
+                  >
+                    <img
+                      src={url}
+                      alt="GIF"
+                      loading="lazy"
+                      className="mt-2 block max-h-64 max-w-full rounded object-contain"
+                    />
+                  </a>
+                </Fragment>
+              ))}
             </p>
           )}
           {attachment && (
