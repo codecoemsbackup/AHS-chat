@@ -961,16 +961,23 @@ export default function ChatPage() {
     }, 2000);
   };
 
-  const filteredMembers = useMemo(
+  const staffChatActive = !selectedDmId && !!activeChannel && isStaffChannel(activeChannel.name);
+  const visibleMembers = useMemo(
     () =>
       members.filter(
+        (member) => !member.isBanned && (!staffChatActive || member.isAdmin),
+      ),
+    [members, staffChatActive],
+  );
+  const filteredMembers = useMemo(
+    () =>
+      visibleMembers.filter(
         (member) =>
-          !member.isBanned &&
           (member.username || member.firstName || "")
             .toLowerCase()
             .includes(memberSearch.toLowerCase()),
       ),
-    [members, memberSearch],
+    [visibleMembers, memberSearch],
   );
   const selectedDm = dmConversations.find((conversation) => conversation.id === selectedDmId);
   const typingNames = members
@@ -1673,7 +1680,7 @@ export default function ChatPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Members</h2>
             <Badge variant="secondary" className="ml-auto">
-              {members.filter((member) => !member.isBanned).length}
+              {visibleMembers.length}
             </Badge>
             <Button
               variant="ghost"
