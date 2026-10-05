@@ -335,7 +335,22 @@ export class DatabaseStorage implements IStorage {
 
   async ensureAppearanceSchema(): Promise<void> {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_color varchar(7) NOT NULL DEFAULT '#7c3aed'`);
-    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS username_color varchar(7) NOT NULL DEFAULT '#7c3aed'`);
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS username_color varchar(7) NOT NULL DEFAULT '#ffffff'`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS app_migrations (
+      name varchar(255) PRIMARY KEY,
+      applied_at timestamp NOT NULL DEFAULT now()
+    )`);
+    await db.execute(sql`WITH applied AS (
+      INSERT INTO app_migrations (name)
+      VALUES ('username-color-white-default')
+      ON CONFLICT DO NOTHING
+      RETURNING name
+    )
+    UPDATE users
+    SET username_color = '#ffffff'
+    WHERE username_color = '#7c3aed'
+      AND EXISTS (SELECT 1 FROM applied)`);
+    await db.execute(sql`ALTER TABLE users ALTER COLUMN username_color SET DEFAULT '#ffffff'`);
   }
 
   async ensureMessagePaginationIndexes(): Promise<void> {

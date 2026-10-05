@@ -26,13 +26,13 @@ export default function AppearanceSettingsDialog({
 }: AppearanceSettingsDialogProps) {
   const { toast } = useToast();
   const [themeColor, setThemeColor] = useState(user.themeColor || "#7c3aed");
-  const [usernameColor, setUsernameColor] = useState(user.usernameColor || "#7c3aed");
+  const [usernameColor, setUsernameColor] = useState(user.usernameColor || "#ffffff");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setThemeColor(user.themeColor || "#7c3aed");
-      setUsernameColor(user.usernameColor || "#7c3aed");
+      setUsernameColor(user.usernameColor || "#ffffff");
     }
   }, [open, user.themeColor, user.usernameColor]);
 

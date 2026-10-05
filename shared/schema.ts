@@ -41,7 +41,7 @@ export const users = pgTable(
     customStatus: varchar("custom_status", { length: 80 }),
     doNotDisturb: boolean("do_not_disturb").notNull().default(false),
     themeColor: varchar("theme_color", { length: 7 }).notNull().default("#7c3aed"),
-    usernameColor: varchar("username_color", { length: 7 }).notNull().default("#7c3aed"),
+    usernameColor: varchar("username_color", { length: 7 }).notNull().default("#ffffff"),
     username: varchar("username").unique(),
     passwordHash: varchar("password_hash"),
     status: varchar("status").notNull().default("offline"),
