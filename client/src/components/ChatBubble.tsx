@@ -109,7 +109,7 @@ export default function ChatBubble({
             You were mentioned
           </span>
         )}
-        <div className={`flex max-w-full items-center gap-1 ${isSent ? "" : "flex-row-reverse"}`}>
+        <div className="relative inline-flex max-w-full">
           <div
             className={`relative inline-flex h-fit max-w-full rounded-2xl px-4 py-2 shadow-sm transition-shadow group-hover:shadow-md ${
               isSent
@@ -211,7 +211,11 @@ export default function ChatBubble({
             </Button>
           )}
           </div>
-          <div className="flex shrink-0 items-center">
+          <div
+            className={`absolute top-1/2 flex -translate-y-1/2 items-center ${
+              isSent ? "left-full ml-1" : "right-full mr-1"
+            }`}
+          >
             <span className="pointer-events-none text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
               {timestamp}
             </span>
