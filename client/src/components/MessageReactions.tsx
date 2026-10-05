@@ -57,7 +57,9 @@ export default function MessageReactions({
           aria-pressed={reaction.reactedByMe}
           aria-label={`${reaction.emoji} ${reaction.count} ${reaction.count === 1 ? "reaction" : "reactions"}`}
           className={`h-7 min-w-10 gap-1 rounded-full px-2 ${
-            reaction.reactedByMe ? "border-primary bg-primary/10" : ""
+            reaction.reactedByMe
+              ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+              : ""
           }`}
         >
           <span>{reaction.emoji}</span>
@@ -73,7 +75,7 @@ export default function MessageReactions({
             disabled={disabled || pending !== null || (!canAddReaction && !open)}
             aria-label="Add reaction"
             title={canAddReaction ? "Add reaction" : "You have used all 10 reactions for this message"}
-            className="h-7 w-7 rounded-full text-muted-foreground"
+            className="h-7 w-7 rounded-full text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
           >
             <SmilePlus className="h-4 w-4" />
           </Button>
