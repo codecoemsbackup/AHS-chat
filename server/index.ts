@@ -53,6 +53,7 @@ app.use((req, res, next) => {
   await storage.ensureUploadsSchema();
   await storage.ensureCustomStatusSchema();
   await storage.ensureDoNotDisturbSchema();
+  await storage.ensureAppearanceSchema();
   await storage.ensurePollsSchema();
   await storage.ensureMessageReactionsSchema();
   await storage.ensureMessagePaginationIndexes();

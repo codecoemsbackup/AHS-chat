@@ -196,7 +196,9 @@ export default function DirectMessagePanel({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-semibold">{peerName}</h1>
+          <h1 className="truncate font-semibold" style={{ color: conversation.peer.usernameColor }}>
+            {peerName}
+          </h1>
           <p className="text-xs text-muted-foreground">
             {conversation.peer.customStatus ||
               (conversation.status === "accepted" ? "Direct message" : "Direct message request")}
@@ -235,6 +237,7 @@ export default function DirectMessagePanel({
                       : "Now"}
                     isSent={message.senderId === currentUserId}
                     senderName={message.sender.username || message.sender.firstName || "Member"}
+                    senderColor={message.sender.usernameColor}
                     avatarUrl={message.sender.profileImageUrl}
                     reactions={message.reactions}
                     onToggleReaction={(emoji) => toggleReaction(message.id, emoji)}

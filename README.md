@@ -10,4 +10,6 @@ New accounts must provide a real first and last name. Names are visible only to 
 
 Messages, including private messages and polls, support emoji reactions. Each person can add up to 10 distinct emoji reactions to a message and remove them by selecting them again.
 
+Users can personalize the app accent and their username display color independently from the Appearance settings.
+
 After pulling schema changes, apply them to the configured database with `npm run db:push`.

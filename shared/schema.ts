@@ -40,6 +40,8 @@ export const users = pgTable(
     profileImageUrl: varchar("profile_image_url"),
     customStatus: varchar("custom_status", { length: 80 }),
     doNotDisturb: boolean("do_not_disturb").notNull().default(false),
+    themeColor: varchar("theme_color", { length: 7 }).notNull().default("#7c3aed"),
+    usernameColor: varchar("username_color", { length: 7 }).notNull().default("#7c3aed"),
     username: varchar("username").unique(),
     passwordHash: varchar("password_hash"),
     status: varchar("status").notNull().default("offline"),
@@ -327,6 +329,11 @@ export const updateDoNotDisturbSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const updateAppearanceSchema = z.object({
+  themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  usernameColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+});
+
 export const updateChannelSchema = z.object({
   name: z.string().trim().min(1).max(40).regex(/^[a-zA-Z0-9][a-zA-Z0-9-_ ]*$/),
   description: z.string().trim().max(120).optional(),
@@ -454,11 +461,11 @@ export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;
 export type DmConversationWithPeer = DmConversation & {
-  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus" | "isOwner">;
+  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus" | "isOwner" | "usernameColor">;
   isIncoming: boolean;
 };
 export type DmMessageWithSender = DmMessage & {
-  sender: Pick<User, "id" | "username" | "firstName" | "profileImageUrl">;
+  sender: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "usernameColor">;
   reactions?: MessageReactionSummary[];
 };
 export type BannedUser = typeof bannedUsers.$inferSelect;

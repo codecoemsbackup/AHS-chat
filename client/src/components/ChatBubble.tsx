@@ -32,6 +32,7 @@ interface ChatBubbleProps {
   timestamp: string;
   isSent: boolean;
   senderName?: string;
+  senderColor?: string | null;
   avatarUrl?: string | null;
   attachment?: {
     url: string;
@@ -54,6 +55,7 @@ export default function ChatBubble({
   timestamp,
   isSent,
   senderName,
+  senderColor,
   avatarUrl,
   attachment,
   canDelete = false,
@@ -91,7 +93,7 @@ export default function ChatBubble({
         }`}
       >
         {senderName && !isSent && (
-          <span className="mb-1 px-1 text-xs font-semibold text-muted-foreground">
+          <span className="mb-1 px-1 text-xs font-semibold text-muted-foreground" style={senderColor ? { color: senderColor } : undefined}>
             {senderName}
           </span>
         )}

@@ -58,6 +58,7 @@ export interface IStorage {
   updateUserStatus(userId: string, status: string): Promise<void>;
   updateCustomStatus(userId: string, customStatus: string | null): Promise<User>;
   updateDoNotDisturb(userId: string, enabled: boolean): Promise<User>;
+  updateAppearance(userId: string, themeColor: string, usernameColor: string): Promise<User>;
   updateUsername(userId: string, username: string): Promise<User>;
   updateProfileImage(userId: string, profileImageUrl: string): Promise<User>;
 
@@ -123,6 +124,19 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async updateAppearance(
+    userId: string,
+    themeColor: string,
+    usernameColor: string,
+  ): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ themeColor, usernameColor, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
     return user;
   }
 
@@ -317,6 +331,11 @@ export class DatabaseStorage implements IStorage {
 
   async ensureDoNotDisturbSchema(): Promise<void> {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS do_not_disturb boolean NOT NULL DEFAULT false`);
+  }
+
+  async ensureAppearanceSchema(): Promise<void> {
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_color varchar(7) NOT NULL DEFAULT '#7c3aed'`);
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS username_color varchar(7) NOT NULL DEFAULT '#7c3aed'`);
   }
 
   async ensureMessagePaginationIndexes(): Promise<void> {
@@ -825,6 +844,7 @@ export class DatabaseStorage implements IStorage {
         status: peer.status,
         customStatus: peer.customStatus,
         isOwner: peer.isOwner,
+        usernameColor: peer.usernameColor,
       },
       isIncoming: conversation.requesterId !== userId,
     }));
@@ -864,6 +884,7 @@ export class DatabaseStorage implements IStorage {
         status: row.peer.status,
         customStatus: row.peer.customStatus,
         isOwner: row.peer.isOwner,
+        usernameColor: row.peer.usernameColor,
       },
       isIncoming: row.conversation.requesterId !== userId,
     };
@@ -979,6 +1000,7 @@ export class DatabaseStorage implements IStorage {
           username: sender.username,
           firstName: canViewRealNames || sender.id === userId ? sender.firstName : null,
           profileImageUrl: sender.profileImageUrl,
+          usernameColor: sender.usernameColor,
         },
         reactions: reactionsByMessage.get(message.id) || [],
       })),
@@ -1010,6 +1032,7 @@ export class DatabaseStorage implements IStorage {
         username: sender.username,
         firstName: sender.firstName,
         profileImageUrl: sender.profileImageUrl,
+        usernameColor: sender.usernameColor,
       },
     };
   }

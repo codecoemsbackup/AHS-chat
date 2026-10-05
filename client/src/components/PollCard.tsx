@@ -13,6 +13,7 @@ interface PollCardProps {
   poll: PollDefinition;
   results: PollResults;
   senderName: string;
+  senderColor?: string | null;
   timestamp: string;
   canDelete?: boolean;
   canViewVoters?: boolean;
@@ -27,6 +28,7 @@ export default function PollCard({
   poll,
   results,
   senderName,
+  senderColor,
   timestamp,
   canDelete = false,
   canViewVoters = false,
@@ -85,7 +87,9 @@ export default function PollCard({
           <ListChecks className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-muted-foreground">{senderName} created a poll</p>
+          <p className="text-xs font-semibold text-muted-foreground">
+            <span style={senderColor ? { color: senderColor } : undefined}>{senderName}</span> created a poll
+          </p>
           {canViewVoters ? (
             <button
               type="button"

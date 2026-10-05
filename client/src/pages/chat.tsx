@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Search,
   Settings,
+  Palette,
   Users,
   Camera,
   Pencil,
@@ -56,6 +57,8 @@ import ServerSettingsDialog, {
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
 import RealNameSetup from "@/components/RealNameSetup";
+import AppearanceSettingsDialog from "@/components/AppearanceSettingsDialog";
+import { applyUserThemeColor } from "@/lib/userAppearance";
 import { applyReactionEvent } from "@/lib/messageReactions";
 import {
   Dialog,
@@ -142,6 +145,7 @@ export default function ChatPage() {
   const [selectedDmId, setSelectedDmId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusDraft, setStatusDraft] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
@@ -173,6 +177,18 @@ export default function ChatPage() {
   const previousChannelMessagesRef = useRef<{ channelId: string | null; lastMessageId?: string }>({
     channelId: null,
   });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateTheme = () => applyUserThemeColor(user?.themeColor);
+    updateTheme();
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => {
+      observer.disconnect();
+      applyUserThemeColor();
+    };
+  }, [user?.themeColor]);
   const loadingOlderChannelRef = useRef(false);
   const [loadingOlderChannel, setLoadingOlderChannel] = useState(false);
   const [connectionPing, setConnectionPing] = useState<number | null>(null);
@@ -510,6 +526,12 @@ export default function ChatPage() {
     const handleMemberUpdated = (payload: Partial<User> & { userId?: string }) => {
       invalidateServer();
       void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          query.queryKey[0].startsWith("/api/dms/") &&
+          query.queryKey[0].endsWith("/messages"),
+      });
       if (payload.id === user.id || payload.userId === user.id) {
         if (payload.isAdmin === false) {
           const staffChannel = queryClient
@@ -1170,6 +1192,11 @@ export default function ChatPage() {
         members={members}
         actor={members.find((member) => member.id === user.id) || user}
       />
+      <AppearanceSettingsDialog
+        open={appearanceOpen}
+        onOpenChange={setAppearanceOpen}
+        user={user}
+      />
       <PollCreateDialog
         open={pollCreateOpen}
         isSaving={pollCreating}
@@ -1247,6 +1274,15 @@ export default function ChatPage() {
                 <Settings className="h-4 w-4" />
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setAppearanceOpen(true)}
+              aria-label="Open appearance settings"
+              title="Appearance settings"
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
             <ThemeToggle />
           </div>
 
@@ -1280,7 +1316,12 @@ export default function ChatPage() {
                 </span>
               </button>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{user.username || user.firstName || "User"}</p>
+                <p
+                  className="truncate text-sm font-semibold"
+                  style={{ color: user.usernameColor }}
+                >
+                  {user.username || user.firstName || "User"}
+                </p>
                 <button
                   type="button"
                   className="mt-1 flex max-w-full items-center gap-1.5 rounded-md text-left text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1392,7 +1433,9 @@ export default function ChatPage() {
                           </span>
                         )}
                       </span>
-                      <span className="truncate">{peerName}</span>
+                      <span className="truncate" style={{ color: conversation.peer.usernameColor }}>
+                        {peerName}
+                      </span>
                     {conversation.status === "pending" && conversation.isIncoming && (
                       <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
                         Request
@@ -1562,6 +1605,7 @@ export default function ChatPage() {
                             poll={message.pollData}
                             results={message.pollResults}
                             senderName={senderName}
+                            senderColor={sender?.usernameColor}
                             timestamp={
                               message.createdAt
                                 ? new Date(message.createdAt).toLocaleTimeString([], {
@@ -1599,6 +1643,7 @@ export default function ChatPage() {
                           }
                           isSent={message.senderId === user.id}
                           senderName={senderName}
+                          senderColor={sender?.usernameColor}
                           avatarUrl={sender?.profileImageUrl}
                           isMentionedUser={message.mentionUserIds.includes(user.id)}
                           attachment={attachment}
@@ -1721,7 +1766,12 @@ export default function ChatPage() {
                     isDoNotDisturb={member.doNotDisturb}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{member.username || member.firstName || "Member"}</p>
+                    <p
+                      className="truncate text-sm"
+                      style={{ color: member.usernameColor }}
+                    >
+                      {member.username || member.firstName || "Member"}
+                    </p>
                     {(member.firstName || member.lastName) && (
                       <p className="truncate text-xs text-muted-foreground">
                         {[member.firstName, member.lastName].filter(Boolean).join(" ")}

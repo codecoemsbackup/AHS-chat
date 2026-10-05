@@ -18,6 +18,7 @@ import {
   updateUsernameSchema,
   updateCustomStatusSchema,
   updateDoNotDisturbSchema,
+  updateAppearanceSchema,
   updateChannelSchema,
   updateAdminSchema,
   updateAdminDelegationSchema,
@@ -270,6 +271,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(publicUser(user, actor));
     } catch (error: any) {
       sendError(res, error, "Failed to update Do Not Disturb");
+    }
+  });
+
+  app.patch("/api/profile/appearance", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const parsed = updateAppearanceSchema.parse(req.body);
+      const user = await storage.updateAppearance(
+        actor.id,
+        parsed.themeColor,
+        parsed.usernameColor,
+      );
+      ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
+      res.json(publicUser(user, actor));
+    } catch (error: any) {
+      sendError(res, error, "Failed to update appearance");
     }
   });
 
