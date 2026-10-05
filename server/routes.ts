@@ -333,9 +333,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!(await activeUser(req, res))) return;
       const query = String(req.query.q || "").trim().slice(0, 100);
+      let cursor: { tenorPos?: string | null; giphyOffset?: number | null } | undefined;
+      if (req.query.cursor) {
+        try {
+          const parsedCursor = JSON.parse(String(req.query.cursor));
+          if (
+            !parsedCursor ||
+            typeof parsedCursor !== "object" ||
+            (parsedCursor.tenorPos != null && typeof parsedCursor.tenorPos !== "string") ||
+            (parsedCursor.giphyOffset != null &&
+              (!Number.isInteger(parsedCursor.giphyOffset) || parsedCursor.giphyOffset < 0))
+          ) {
+            return res.status(400).json({ message: "Invalid GIF search cursor" });
+          }
+          cursor = parsedCursor;
+        } catch {
+          return res.status(400).json({ message: "Invalid GIF search cursor" });
+        }
+      }
       const providers: Array<{
         name: "Tenor" | "GIPHY";
-        search: () => Promise<GifSearchResult[]>;
+        search: () => Promise<{ gifs: GifSearchResult[]; next: string | number | null }>;
       }> = [];
       const tenorApiKey = process.env.TENOR_API_KEY;
       const giphyApiKey = process.env.GIPHY_API_KEY;
@@ -344,6 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         providers.push({
           name: "Tenor",
           search: async () => {
+            if (cursor && cursor.tenorPos == null) return { gifs: [], next: null };
             const endpoint = query
               ? "https://tenor.googleapis.com/v2/search"
               : "https://tenor.googleapis.com/v2/featured";
@@ -353,6 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             url.searchParams.set("limit", "24");
             url.searchParams.set("media_filter", "gif,tinygif");
             if (query) url.searchParams.set("q", query);
+            if (cursor?.tenorPos) url.searchParams.set("pos", cursor.tenorPos);
 
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Tenor returned ${response.status}`);
@@ -362,8 +382,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 content_description?: string;
                 media_formats?: Record<string, { url?: string; dims?: [number, number] }>;
               }>;
+              next?: string;
             };
-            return (payload.results || []).flatMap((result) => {
+            const gifs = (payload.results || []).flatMap((result) => {
               const formats = result.media_formats || {};
               const media = formats.gif || formats.mediumgif || formats.tinygif;
               const preview = formats.tinygif || media;
@@ -377,6 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 height: media.dims?.[1] || 180,
               }];
             });
+            return { gifs, next: payload.next || null };
           },
         });
       }
@@ -385,6 +407,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         providers.push({
           name: "GIPHY",
           search: async () => {
+            if (cursor && cursor.giphyOffset == null) return { gifs: [], next: null };
+            const offset = cursor?.giphyOffset ?? 0;
             const url = new URL(
               query
                 ? "https://api.giphy.com/v1/gifs/search"
@@ -392,6 +416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
             url.searchParams.set("api_key", giphyApiKey);
             url.searchParams.set("limit", "24");
+            url.searchParams.set("offset", String(offset));
             url.searchParams.set("rating", "g");
             if (query) url.searchParams.set("q", query);
 
@@ -407,8 +432,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   height?: string;
                 }>;
               }>;
+              pagination?: { total_count?: number; offset?: number; count?: number };
             };
-            return (payload.data || []).flatMap((result) => {
+            const gifs = (payload.data || []).flatMap((result) => {
               const media = result.images?.original;
               const preview = result.images?.fixed_width_small || result.images?.fixed_width || media;
               if (!result.id || !media?.url || !preview?.url) return [];
@@ -421,6 +447,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 height: Number(media.height) || 180,
               }];
             });
+            const count = payload.pagination?.count ?? gifs.length;
+            const next =
+              offset + count < (payload.pagination?.total_count ?? offset + count)
+                ? offset + count
+                : null;
+            return { gifs, next };
           },
         });
       }
@@ -434,7 +466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const outcomes = await Promise.all(
         providers.map(async (provider) => {
           try {
-            return { provider: provider.name, gifs: await provider.search() };
+            return { provider: provider.name, ...await provider.search() };
           } catch (error) {
             return {
               provider: provider.name,
@@ -450,9 +482,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (gifs.length === 0 && failures.length > 0) {
         throw new Error(failures.join("; "));
       }
+      const tenorOutcome = outcomes.find((outcome) => outcome.provider === "Tenor");
+      const giphyOutcome = outcomes.find((outcome) => outcome.provider === "GIPHY");
       res.json({
         gifs,
         providers: outcomes.filter((outcome) => "gifs" in outcome).map((outcome) => outcome.provider),
+        cursor: {
+          tenorPos:
+            tenorOutcome && "next" in tenorOutcome && typeof tenorOutcome.next === "string"
+              ? tenorOutcome.next
+              : null,
+          giphyOffset:
+            giphyOutcome && "next" in giphyOutcome && typeof giphyOutcome.next === "number"
+              ? giphyOutcome.next
+              : null,
+        },
         warning: failures.length > 0 ? `Some GIF providers failed: ${failures.join("; ")}` : undefined,
       });
     } catch (error: any) {

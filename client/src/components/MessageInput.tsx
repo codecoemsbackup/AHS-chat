@@ -43,6 +43,11 @@ export interface GifResult {
   height: number;
 }
 
+interface GifSearchCursor {
+  tenorPos: string | null;
+  giphyOffset: number | null;
+}
+
 interface MessageInputProps {
   onSendMessage: (
     message: string,
@@ -85,6 +90,7 @@ export default function MessageInput({
   const [gifQuery, setGifQuery] = useState("");
   const [gifResults, setGifResults] = useState<GifResult[]>([]);
   const [gifProviders, setGifProviders] = useState<string[]>([]);
+  const [gifCursor, setGifCursor] = useState<GifSearchCursor | null>(null);
   const [gifLoading, setGifLoading] = useState(false);
   const [gifError, setGifError] = useState("");
   const [mentionUserIds, setMentionUserIds] = useState<Set<string>>(new Set());
@@ -149,19 +155,33 @@ export default function MessageInput({
     selectFile(file);
   };
 
-  const searchGifs = async (query = gifQuery) => {
+  const searchGifs = async (query = gifQuery, append = false) => {
     setGifLoading(true);
     setGifError("");
     try {
-      const params = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("q", query.trim());
+      if (append && gifCursor) params.set("cursor", JSON.stringify(gifCursor));
       const result = await apiRequest(`/api/gifs/search${params}`, "GET");
-      setGifResults(result.gifs || []);
-      setGifProviders(result.providers || []);
+      setGifResults((current) => {
+        if (!append) return result.gifs || [];
+        const existingIds = new Set(current.map((gif) => gif.id));
+        return [...current, ...(result.gifs || []).filter((gif: GifResult) => !existingIds.has(gif.id))];
+      });
+      setGifProviders((current) =>
+        append
+          ? Array.from(new Set([...current, ...(result.providers || [])]))
+          : result.providers || [],
+      );
+      setGifCursor(result.cursor || null);
       setGifError(result.warning || "");
     } catch (error: any) {
       setGifError(error.message || "GIF search is unavailable");
-      setGifResults([]);
-      setGifProviders([]);
+      if (!append) {
+        setGifResults([]);
+        setGifProviders([]);
+        setGifCursor(null);
+      }
     } finally {
       setGifLoading(false);
     }
@@ -360,7 +380,10 @@ export default function MessageInput({
           >
             <Input
               value={gifQuery}
-              onChange={(event) => setGifQuery(event.target.value)}
+              onChange={(event) => {
+                setGifQuery(event.target.value);
+                setGifCursor(null);
+              }}
               placeholder="Search GIFs"
               aria-label="Search GIFs"
               autoFocus
@@ -413,6 +436,18 @@ export default function MessageInput({
               Powered by {gifProviders.join(" and ")}
             </p>
           )}
+          {gifCursor &&
+            (gifCursor.tenorPos !== null || gifCursor.giphyOffset !== null) && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 w-full"
+                onClick={() => void searchGifs(gifQuery, true)}
+                disabled={gifLoading}
+              >
+                {gifLoading ? "Loading..." : "Load more GIFs"}
+              </Button>
+            )}
         </div>
       )}
       {(mentionSuggestions.length > 0 || showEveryoneSuggestion) && activeMention && (
