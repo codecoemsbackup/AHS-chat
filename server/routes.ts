@@ -24,6 +24,7 @@ import {
   banUserSchema,
   localSignupSchema,
   localLoginSchema,
+  updateRealNameSchema,
   createPollSchema,
   voteOnPollSchema,
   messagePaginationSchema,
@@ -46,10 +47,13 @@ function isStaffChannel(channelName: string) {
   return channelName.trim().toLowerCase() === "staff";
 }
 
-function publicUser(user: any) {
+function publicUser(user: any, viewer?: { id: string; isOwner: boolean }) {
   const { passwordHash: _passwordHash, ...safeUser } = user;
+  const canViewRealName = viewer?.isOwner || viewer?.id === user.id;
   return {
     ...safeUser,
+    firstName: canViewRealName ? safeUser.firstName : null,
+    lastName: canViewRealName ? safeUser.lastName : null,
     status: safeUser.status === "online" ? "online" : "offline",
   };
 }
@@ -58,7 +62,7 @@ function userIdFromRequest(req: any): string {
   return req.user.claims.sub;
 }
 
-async function activeUser(req: any, res: Response) {
+async function activeUser(req: any, res: Response, requireRealName = true) {
   const userId = userIdFromRequest(req);
   const user = await storage.getUser(userId);
   if (!user) {
@@ -67,6 +71,10 @@ async function activeUser(req: any, res: Response) {
   }
   if (await storage.isUserBanned(userId)) {
     res.status(403).json({ message: "You are banned from this server" });
+    return undefined;
+  }
+  if (requireRealName && (!user.firstName?.trim() || !user.lastName?.trim())) {
+    res.status(428).json({ message: "Complete your real name before continuing" });
     return undefined;
   }
   return user;
@@ -149,13 +157,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.createLocalUser(
         parsed.username,
         await hashPassword(parsed.password),
+        parsed.firstName,
+        parsed.lastName,
       );
       await new Promise<void>((resolve, reject) => {
         req.login(createLocalSessionUser(user), (error: any) =>
           error ? reject(error) : resolve(),
         );
       });
-      res.status(201).json(publicUser(user));
+      res.status(201).json(publicUser(user, user));
     } catch (error: any) {
       sendError(res, error, "Failed to create account");
     }
@@ -176,7 +186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error ? reject(error) : resolve(),
         );
       });
-      res.json(publicUser(user));
+      res.json(publicUser(user, user));
     } catch (error: any) {
       sendError(res, error, "Failed to sign in");
     }
@@ -185,10 +195,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/user", isAuthenticated, async (req: any, res: Response) => {
     try {
       await storage.ensureServer();
-      const user = await activeUser(req, res);
-      if (user) res.json(publicUser(user));
+      const user = await activeUser(req, res, false);
+      if (user) res.json(publicUser(user, user));
     } catch (error) {
       sendError(res, error, "Failed to fetch user", 500);
+    }
+  });
+
+  app.patch("/api/profile/real-name", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res, false);
+      if (!actor) return;
+      const parsed = updateRealNameSchema.parse(req.body);
+      const user = await storage.updateRealName(actor.id, parsed.firstName, parsed.lastName);
+      ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
+      res.json(publicUser(user, user));
+    } catch (error: any) {
+      sendError(res, error, "Failed to save real name");
     }
   });
 
@@ -201,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existing && existing.id !== actor.id) {
         return res.status(400).json({ message: "Username already taken" });
       }
-      res.json(publicUser(await storage.updateUsername(actor.id, parsed.username)));
+      res.json(publicUser(await storage.updateUsername(actor.id, parsed.username), actor));
     } catch (error: any) {
       sendError(res, error, "Failed to update username");
     }
@@ -218,7 +241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.updateProfileImage(actor.id, upload.url);
       await removeUpload(actor.profileImageUrl);
       ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
-      res.json(publicUser(user));
+      res.json(publicUser(user, actor));
     } catch (error: any) {
       sendError(res, error, "Failed to update profile picture");
     }
@@ -231,7 +254,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const parsed = updateCustomStatusSchema.parse(req.body);
       const user = await storage.updateCustomStatus(actor.id, parsed.customStatus || null);
       ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
-      res.json(publicUser(user));
+      res.json(publicUser(user, actor));
     } catch (error: any) {
       sendError(res, error, "Failed to update status");
     }
@@ -244,7 +267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const parsed = updateDoNotDisturbSchema.parse(req.body);
       const user = await storage.updateDoNotDisturb(actor.id, parsed.enabled);
       ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
-      res.json(publicUser(user));
+      res.json(publicUser(user, actor));
     } catch (error: any) {
       sendError(res, error, "Failed to update Do Not Disturb");
     }
@@ -441,7 +464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         channels: actor.isAdmin
           ? channels
           : channels.filter((channel) => !isStaffChannel(channel.name)),
-        members: members.map(publicUser),
+        members: members.map((member) => publicUser(member, actor)),
       });
     } catch (error) {
       sendError(res, error, "Failed to fetch server", 500);
@@ -452,7 +475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const actor = await activeUser(req, res);
       if (!actor) return;
-      res.json(await storage.getDmConversations(actor.id));
+      res.json(await storage.getDmConversations(actor.id, actor.isOwner));
     } catch (error) {
       sendError(res, error, "Failed to fetch direct messages", 500);
     }
@@ -470,7 +493,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!recipient || (await storage.isUserBanned(recipientId))) {
         return res.status(404).json({ message: "Member not found" });
       }
-      const conversation = await storage.createDmConversation(actor.id, recipient.id);
+      const conversation = await storage.createDmConversation(
+        actor.id,
+        recipient.id,
+        actor.isOwner,
+      );
       for (const participantId of [actor.id, recipient.id]) {
         ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
           conversationId: conversation.id,
@@ -487,7 +514,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const actor = await activeUser(req, res);
       if (!actor) return;
       const { accepted } = respondToDmRequestSchema.parse(req.body);
-      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      const conversation = await storage.getDmConversation(
+        req.params.conversationId,
+        actor.id,
+        actor.isOwner,
+      );
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.requesterId === actor.id || conversation.status !== "pending") {
         return res.status(403).json({ message: "This message request cannot be changed" });
@@ -516,12 +547,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const actor = await activeUser(req, res);
       if (!actor) return;
       const pagination = messagePaginationSchema.parse(req.query);
-      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      const conversation = await storage.getDmConversation(
+        req.params.conversationId,
+        actor.id,
+        actor.isOwner,
+      );
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.status !== "accepted") {
         return res.status(403).json({ message: "Accept the message request before reading messages" });
       }
-      res.json(await storage.getDmMessages(conversation.id, pagination, actor.id));
+      res.json(
+        await storage.getDmMessages(conversation.id, pagination, actor.id, actor.isOwner),
+      );
     } catch (error) {
       sendError(res, error, "Failed to fetch direct messages", 500);
     }
@@ -532,7 +569,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const actor = await activeUser(req, res);
       if (!actor) return;
       const parsed = insertDmMessageSchema.parse(req.body);
-      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      const conversation = await storage.getDmConversation(
+        req.params.conversationId,
+        actor.id,
+        actor.isOwner,
+      );
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.status !== "accepted") {
         return res.status(403).json({ message: "Accept the message request before sending messages" });
@@ -541,10 +582,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "This member cannot receive messages" });
       }
       const message = await storage.createDmMessage(conversation.id, actor.id, parsed.content);
+      const peer = await storage.getUser(conversation.peer.id);
       for (const participantId of [conversation.participantOneId, conversation.participantTwoId]) {
+        const participantCanViewName = participantId === actor.id || Boolean(
+          participantId === conversation.peer.id && peer?.isOwner,
+        );
         ioFor(app)?.to(`user:${participantId}`).emit("dm:message", {
           conversationId: conversation.id,
-          message,
+          message: participantCanViewName
+            ? message
+            : {
+                ...message,
+                sender: { ...message.sender, firstName: null },
+              },
         });
         ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
           conversationId: conversation.id,
@@ -561,7 +611,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const actor = await activeUser(req, res);
       if (!actor) return;
       const parsed = toggleMessageReactionSchema.parse(req.body);
-      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      const conversation = await storage.getDmConversation(
+        req.params.conversationId,
+        actor.id,
+        actor.isOwner,
+      );
       if (!conversation || conversation.status !== "accepted") {
         return res.status(404).json({ message: "Conversation not found" });
       }
@@ -665,7 +719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const parsed = updateAdminDelegationSchema.parse(req.body);
         const user = await storage.updateAdminDelegation(actor.id, parsed.enabled);
-        res.json(publicUser(user));
+        res.json(publicUser(user, actor));
       } catch (error: any) {
         sendError(res, error, "Failed to update admin delegation");
       }
@@ -698,7 +752,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (parsed.isAdmin) targetSocket?.join(STAFF_ROOM);
         else targetSocket?.leave(STAFF_ROOM);
         ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
-        res.json(publicUser(user));
+        res.json(publicUser(user, actor));
       } catch (error: any) {
         sendError(res, error, "Failed to update admin permission");
       }
@@ -724,7 +778,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const user = await storage.updateUsername(target.id, parsed.username);
         ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
-        res.json(publicUser(user));
+        res.json(publicUser(user, actor));
       } catch (error: any) {
         sendError(res, error, "Failed to change member name");
       }
@@ -749,11 +803,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (targetSocket) {
           ioFor(app)?.to(targetSocket).emit("server:banned");
         }
-        ioFor(app)?.to(SERVER_ROOM).emit("member:updated", {
+        ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser({
           ...target,
           isBanned: true,
           banReason: parsed.reason || null,
-        });
+        }));
         res.json({ success: true });
       } catch (error: any) {
         sendError(res, error, "Failed to ban member");

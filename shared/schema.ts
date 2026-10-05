@@ -347,6 +347,13 @@ export const banUserSchema = z.object({
 export const localSignupSchema = z.object({
   username: z.string().trim().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/),
   password: z.string().min(8).max(128),
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+});
+
+export const updateRealNameSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
 });
 
 export const localLoginSchema = z.object({
@@ -447,7 +454,7 @@ export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;
 export type DmConversationWithPeer = DmConversation & {
-  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus">;
+  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus" | "isOwner">;
   isIncoming: boolean;
 };
 export type DmMessageWithSender = DmMessage & {

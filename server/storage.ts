@@ -53,7 +53,8 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  createLocalUser(username: string, passwordHash: string): Promise<User>;
+  createLocalUser(username: string, passwordHash: string, firstName: string, lastName: string): Promise<User>;
+  updateRealName(userId: string, firstName: string, lastName: string): Promise<User>;
   updateUserStatus(userId: string, status: string): Promise<void>;
   updateCustomStatus(userId: string, customStatus: string | null): Promise<User>;
   updateDoNotDisturb(userId: string, enabled: boolean): Promise<User>;
@@ -101,14 +102,15 @@ export interface IStorage {
     reactions: MessageReactionSummary[];
   }>;
 
-  getDmConversations(userId: string): Promise<DmConversationWithPeer[]>;
-  getDmConversation(conversationId: string, userId: string): Promise<DmConversationWithPeer | undefined>;
-  createDmConversation(requesterId: string, peerId: string): Promise<DmConversationWithPeer>;
+  getDmConversations(userId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer[]>;
+  getDmConversation(conversationId: string, userId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer | undefined>;
+  createDmConversation(requesterId: string, peerId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer>;
   respondToDmRequest(conversationId: string, userId: string, accepted: boolean): Promise<DmConversation | undefined>;
   getDmMessages(
     conversationId: string,
     pagination: MessagePagination,
     userId: string,
+    canViewRealNames?: boolean,
   ): Promise<MessagePage<DmMessageWithSender>>;
   createDmMessage(conversationId: string, senderId: string, content: string): Promise<DmMessageWithSender>;
   getDmMessageReactions(messageIds: string[], userId: string): Promise<Map<string, MessageReactionSummary[]>>;
@@ -144,12 +146,26 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async createLocalUser(username: string, passwordHash: string): Promise<User> {
+  async createLocalUser(
+    username: string,
+    passwordHash: string,
+    firstName: string,
+    lastName: string,
+  ): Promise<User> {
     const [user] = await db
       .insert(users)
-      .values({ username, passwordHash })
+      .values({ username, passwordHash, firstName, lastName })
       .returning();
     await this.ensureServer();
+    return user;
+  }
+
+  async updateRealName(userId: string, firstName: string, lastName: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ firstName, lastName, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
     return user;
   }
 
@@ -662,7 +678,7 @@ export class DatabaseStorage implements IStorage {
       if (includeVoters) {
         votersByOption[vote.optionIndex].push({
           userId: vote.userId,
-          name: vote.username || vote.firstName || "Member",
+          name: vote.username || "Member",
         });
       }
     }
@@ -696,7 +712,7 @@ export class DatabaseStorage implements IStorage {
       id: row.message.id,
       content: row.message.content,
       senderId: row.message.senderId,
-      senderName: row.sender.username || row.sender.firstName || "Member",
+      senderName: row.sender.username || "Member",
     };
     return { ...message, reply };
   }
@@ -778,7 +794,10 @@ export class DatabaseStorage implements IStorage {
     return { added, reactions: reactionsByMessage.get(messageId) || [] };
   }
 
-  async getDmConversations(userId: string): Promise<DmConversationWithPeer[]> {
+  async getDmConversations(
+    userId: string,
+    canViewRealNames = false,
+  ): Promise<DmConversationWithPeer[]> {
     const rows = await db
       .select({ conversation: dmConversations, peer: users })
       .from(dmConversations)
@@ -801,10 +820,11 @@ export class DatabaseStorage implements IStorage {
       peer: {
         id: peer.id,
         username: peer.username,
-        firstName: peer.firstName,
+        firstName: canViewRealNames || peer.id === userId ? peer.firstName : null,
         profileImageUrl: peer.profileImageUrl,
         status: peer.status,
         customStatus: peer.customStatus,
+        isOwner: peer.isOwner,
       },
       isIncoming: conversation.requesterId !== userId,
     }));
@@ -813,6 +833,7 @@ export class DatabaseStorage implements IStorage {
   async getDmConversation(
     conversationId: string,
     userId: string,
+    canViewRealNames = false,
   ): Promise<DmConversationWithPeer | undefined> {
     const [row] = await db
       .select({ conversation: dmConversations, peer: users })
@@ -838,16 +859,21 @@ export class DatabaseStorage implements IStorage {
       peer: {
         id: row.peer.id,
         username: row.peer.username,
-        firstName: row.peer.firstName,
+        firstName: canViewRealNames || row.peer.id === userId ? row.peer.firstName : null,
         profileImageUrl: row.peer.profileImageUrl,
         status: row.peer.status,
         customStatus: row.peer.customStatus,
+        isOwner: row.peer.isOwner,
       },
       isIncoming: row.conversation.requesterId !== userId,
     };
   }
 
-  async createDmConversation(requesterId: string, peerId: string): Promise<DmConversationWithPeer> {
+  async createDmConversation(
+    requesterId: string,
+    peerId: string,
+    canViewRealNames = false,
+  ): Promise<DmConversationWithPeer> {
     const [participantOneId, participantTwoId] = [requesterId, peerId].sort();
     const [existing] = await db
       .select()
@@ -887,7 +913,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (!conversation) throw new Error("Failed to create direct message conversation");
-    const result = await this.getDmConversation(conversation.id, requesterId);
+    const result = await this.getDmConversation(conversation.id, requesterId, canViewRealNames);
     if (!result) throw new Error("Failed to load direct message conversation");
     return result;
   }
@@ -917,6 +943,7 @@ export class DatabaseStorage implements IStorage {
     conversationId: string,
     pagination: MessagePagination,
     userId: string,
+    canViewRealNames = false,
   ): Promise<MessagePage<DmMessageWithSender>> {
     const conditions = [eq(dmMessages.conversationId, conversationId)];
     if (pagination.beforeCreatedAt && pagination.beforeId) {
@@ -950,7 +977,7 @@ export class DatabaseStorage implements IStorage {
         sender: {
           id: sender.id,
           username: sender.username,
-          firstName: sender.firstName,
+          firstName: canViewRealNames || sender.id === userId ? sender.firstName : null,
           profileImageUrl: sender.profileImageUrl,
         },
         reactions: reactionsByMessage.get(message.id) || [],

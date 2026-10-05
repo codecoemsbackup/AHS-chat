@@ -55,6 +55,7 @@ import ServerSettingsDialog, {
   type ServerMember,
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
+import RealNameSetup from "@/components/RealNameSetup";
 import { applyReactionEvent } from "@/lib/messageReactions";
 import {
   Dialog,
@@ -1139,7 +1140,11 @@ export default function ChatPage() {
     );
   }
 
-  if (!user || !serverData) return null;
+  if (!user) return null;
+  if (!user.firstName?.trim() || !user.lastName?.trim()) {
+    return <RealNameSetup />;
+  }
+  if (!serverData) return null;
 
   return (
     <>
@@ -1717,6 +1722,11 @@ export default function ChatPage() {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">{member.username || member.firstName || "Member"}</p>
+                    {(member.firstName || member.lastName) && (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {[member.firstName, member.lastName].filter(Boolean).join(" ")}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {member.isBanned
                         ? "Banned"

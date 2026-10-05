@@ -22,6 +22,8 @@ export default function SignupPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const normalizedUsername = username.trim();
@@ -39,6 +41,8 @@ export default function SignupPage() {
       apiRequest("/api/auth/local/signup", "POST", {
         username: normalizedUsername,
         password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
       }),
     onSuccess: (user: User) => {
       queryClient.setQueryData(["/api/auth/user"], user);
@@ -81,10 +85,38 @@ export default function SignupPage() {
         <Card>
           <CardHeader>
             <CardTitle>Create your account</CardTitle>
-            <CardDescription>Make a username and password to join the community server.</CardDescription>
+            <CardDescription>
+              Make an account with your real first and last name. Your real name is visible only to you and owner-role accounts.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSignup} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-first-name">First name</Label>
+                  <Input
+                    id="signup-first-name"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    autoComplete="given-name"
+                    maxLength={80}
+                    required
+                    data-testid="input-first-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-last-name">Last name</Label>
+                  <Input
+                    id="signup-last-name"
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                    autoComplete="family-name"
+                    maxLength={80}
+                    required
+                    data-testid="input-last-name"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="signup-username">Username</Label>
                 <Input
@@ -152,6 +184,8 @@ export default function SignupPage() {
                   checkingUsername ||
                   !usernameIsValid ||
                   !availability?.available ||
+                  !firstName.trim() ||
+                  !lastName.trim() ||
                   password.length < 8 ||
                   password !== confirmPassword
                 }
