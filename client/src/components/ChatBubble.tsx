@@ -93,7 +93,7 @@ export default function ChatBubble({
           } ${isMentionedUser ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-background" : ""}`}
         >
           {message && (
-            <p className="m-0 whitespace-pre-wrap break-words text-center text-sm leading-5">
+            <p className="m-0 whitespace-pre-wrap break-words text-left text-sm leading-5">
               {messageParts.map((part, index) => {
                 const isMention =
                   index % 2 === 1 &&
