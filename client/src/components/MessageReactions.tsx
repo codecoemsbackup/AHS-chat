@@ -12,12 +12,14 @@ interface MessageReactionsProps {
   reactions: MessageReactionSummary[];
   onToggle: (emoji: string) => Promise<void>;
   disabled?: boolean;
+  positionWhenEmpty?: boolean;
 }
 
 export default function MessageReactions({
   reactions,
   onToggle,
   disabled = false,
+  positionWhenEmpty = false,
 }: MessageReactionsProps) {
   const { toast } = useToast();
   const [emoji, setEmoji] = useState("");
@@ -45,7 +47,13 @@ export default function MessageReactions({
   };
 
   return (
-    <div className="mt-1 flex max-w-full flex-wrap items-center gap-1.5">
+    <div
+      className={
+        positionWhenEmpty && reactions.length === 0
+          ? "pointer-events-none absolute -right-8 top-1 z-10 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+          : "mt-1 flex max-w-full flex-wrap items-center gap-1.5"
+      }
+    >
       {reactions.map((reaction) => (
         <Button
           key={reaction.emoji}
