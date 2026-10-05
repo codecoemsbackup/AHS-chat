@@ -109,13 +109,14 @@ export default function ChatBubble({
             You were mentioned
           </span>
         )}
-        <div
-          className={`relative inline-flex h-fit max-w-full rounded-2xl px-4 py-2 shadow-sm transition-shadow group-hover:shadow-md ${
-            isSent
-              ? "glass-bubble-sent rounded-br-md text-primary-foreground"
-              : "glass-bubble rounded-bl-md border"
-          } ${isMentionedUser ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-background" : ""}`}
-        >
+        <div className={`flex max-w-full items-center gap-1 ${isSent ? "flex-row-reverse" : ""}`}>
+          <div
+            className={`relative inline-flex h-fit max-w-full rounded-2xl px-4 py-2 shadow-sm transition-shadow group-hover:shadow-md ${
+              isSent
+                ? "glass-bubble-sent rounded-br-md text-primary-foreground"
+                : "glass-bubble rounded-bl-md border"
+            } ${isMentionedUser ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-background" : ""}`}
+          >
           {message && (
             <p className="m-0 whitespace-pre-wrap break-words text-center text-sm leading-5">
               {messageParts.map((part, index) => {
@@ -209,21 +210,20 @@ export default function ChatBubble({
               <Reply className="h-3.5 w-3.5 text-primary" />
             </Button>
           )}
+          </div>
+          <div className="flex shrink-0 items-center">
+            <span className="pointer-events-none text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              {timestamp}
+            </span>
+            {onToggleReaction && (
+              <MessageReactions
+                reactions={reactions}
+                onToggle={onToggleReaction}
+                className="mt-0 flex-nowrap"
+              />
+            )}
+          </div>
         </div>
-        {onToggleReaction && (
-          <MessageReactions
-            reactions={reactions}
-            onToggle={onToggleReaction}
-            className={isSent ? "self-start flex-row-reverse" : "self-end"}
-          />
-        )}
-        <span
-          className={`pointer-events-none absolute -bottom-5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
-            isSent ? "left-1" : "right-1"
-          }`}
-        >
-          {timestamp}
-        </span>
       </div>
     </div>
   );
