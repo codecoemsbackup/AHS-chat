@@ -79,7 +79,7 @@ export default function ChatBubble({
 
   return (
     <div
-      className={`group mb-5 flex w-full gap-3 ${isSent ? "justify-end" : "justify-start"}`}
+      className={`group mb-3 flex w-full gap-3 ${isSent ? "justify-end" : "justify-start"}`}
       data-testid={`message-${isSent ? "sent" : "received"}`}
     >
       {!isSent && senderName && (
