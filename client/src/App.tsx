@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,9 +9,10 @@ import LandingPage from "@/pages/landing";
 import ChatPage from "@/pages/chat";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
+import FeaturesPage from "@/pages/features";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -26,6 +27,17 @@ function Router() {
 
   return (
     <Switch>
+      <Route path="/features">
+        {isAuthenticated ? (
+          user?.username?.toLowerCase() === "codecoems" ? (
+            <FeaturesPage />
+          ) : (
+            <Redirect to="/" />
+          )
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
       {isAuthenticated ? (
         <>
           <Route path="/" component={ChatPage} />
