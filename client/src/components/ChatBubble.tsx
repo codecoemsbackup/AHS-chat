@@ -211,11 +211,15 @@ export default function ChatBubble({
           )}
         </div>
         {onToggleReaction && (
-          <MessageReactions reactions={reactions} onToggle={onToggleReaction} />
+          <MessageReactions
+            reactions={reactions}
+            onToggle={onToggleReaction}
+            className={isSent ? "self-start flex-row-reverse" : "self-end"}
+          />
         )}
         <span
           className={`pointer-events-none absolute -bottom-5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
-            isSent ? "right-1" : "left-1"
+            isSent ? "left-1" : "right-1"
           }`}
         >
           {timestamp}
