@@ -3,7 +3,8 @@ import { AtSign, Download, FileText, Reply, Trash2 } from "lucide-react";
 import UserAvatar from "./UserAvatar";
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/fileUploads";
-import type { MessageReplyPreview } from "@shared/schema";
+import type { MessageReactionSummary, MessageReplyPreview } from "@shared/schema";
+import MessageReactions from "@/components/MessageReactions";
 
 interface ChatBubbleProps {
   message: string;
@@ -23,6 +24,8 @@ interface ChatBubbleProps {
   onReply?: () => void;
   mentionNames?: string[];
   isMentionedUser?: boolean;
+  reactions?: MessageReactionSummary[];
+  onToggleReaction?: (emoji: string) => Promise<void>;
 }
 
 export default function ChatBubble({
@@ -38,6 +41,8 @@ export default function ChatBubble({
   onReply,
   mentionNames = [],
   isMentionedUser = false,
+  reactions = [],
+  onToggleReaction,
 }: ChatBubbleProps) {
   const escapedMentionNames = mentionNames
     .filter(Boolean)
@@ -163,6 +168,9 @@ export default function ChatBubble({
             </Button>
           )}
         </div>
+        {onToggleReaction && (
+          <MessageReactions reactions={reactions} onToggle={onToggleReaction} />
+        )}
         <span
           className={`pointer-events-none absolute -bottom-5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
             isSent ? "right-1" : "left-1"

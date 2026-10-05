@@ -122,6 +122,29 @@ export const pollVotes = pgTable(
   ],
 );
 
+export const messageReactions = pgTable(
+  "message_reactions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    messageId: varchar("message_id")
+      .notNull()
+      .references(() => serverMessages.id, { onDelete: "cascade" }),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: varchar("emoji", { length: 32 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("message_reactions_message_user_emoji_unique").on(
+      table.messageId,
+      table.userId,
+      table.emoji,
+    ),
+    index("message_reactions_message_idx").on(table.messageId),
+  ],
+);
+
 export const dmConversations = pgTable(
   "dm_conversations",
   {
@@ -167,6 +190,29 @@ export const dmMessages = pgTable(
     index("dm_messages_conversation_created_id_idx").on(
       table.conversationId, table.createdAt, table.id,
     ),
+  ],
+);
+
+export const dmMessageReactions = pgTable(
+  "dm_message_reactions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    messageId: varchar("message_id")
+      .notNull()
+      .references(() => dmMessages.id, { onDelete: "cascade" }),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: varchar("emoji", { length: 32 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("dm_message_reactions_message_user_emoji_unique").on(
+      table.messageId,
+      table.userId,
+      table.emoji,
+    ),
+    index("dm_message_reactions_message_idx").on(table.messageId),
   ],
 );
 
@@ -242,6 +288,23 @@ export const insertServerMessageSchema = createInsertSchema(serverMessages)
 
 export const insertDmMessageSchema = z.object({
   content: z.string().trim().min(1).max(2000),
+});
+
+export const toggleMessageReactionSchema = z.object({
+  emoji: z
+    .string()
+    .trim()
+    .min(1)
+    .max(32)
+    .refine((emoji) => {
+      const graphemes = Array.from(
+        new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(emoji),
+      );
+      return (
+        graphemes.length === 1 &&
+        new RegExp("[\\p{Extended_Pictographic}\\p{Regional_Indicator}\\u20e3]", "u").test(emoji)
+      );
+    }, "Choose one emoji"),
 });
 
 export const createDmConversationSchema = z.object({
@@ -347,6 +410,7 @@ export type MessageReplyPreview = {
 export type ServerMessageWithRelations = ServerMessage & {
   reply?: MessageReplyPreview;
   pollResults?: PollResults;
+  reactions?: MessageReactionSummary[];
 };
 export type PollDefinition = {
   question: string;
@@ -367,6 +431,18 @@ export type MessagePage<T> = {
   messages: T[];
   hasMore: boolean;
 };
+export type MessageReactionSummary = {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+};
+export type MessageReactionEvent = {
+  messageId: string;
+  emoji: string;
+  count: number;
+  userId: string;
+  added: boolean;
+};
 export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;
@@ -376,5 +452,6 @@ export type DmConversationWithPeer = DmConversation & {
 };
 export type DmMessageWithSender = DmMessage & {
   sender: Pick<User, "id" | "username" | "firstName" | "profileImageUrl">;
+  reactions?: MessageReactionSummary[];
 };
 export type BannedUser = typeof bannedUsers.$inferSelect;

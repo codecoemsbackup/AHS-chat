@@ -27,6 +27,7 @@ import {
   createPollSchema,
   voteOnPollSchema,
   messagePaginationSchema,
+  toggleMessageReactionSchema,
 } from "@shared/schema";
 import {
   MAX_ATTACHMENT_BYTES,
@@ -520,7 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (conversation.status !== "accepted") {
         return res.status(403).json({ message: "Accept the message request before reading messages" });
       }
-      res.json(await storage.getDmMessages(conversation.id, pagination));
+      res.json(await storage.getDmMessages(conversation.id, pagination, actor.id));
     } catch (error) {
       sendError(res, error, "Failed to fetch direct messages", 500);
     }
@@ -552,6 +553,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(message);
     } catch (error: any) {
       sendError(res, error, "Failed to send direct message");
+    }
+  });
+
+  app.post("/api/dms/:conversationId/messages/:messageId/reactions", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const parsed = toggleMessageReactionSchema.parse(req.body);
+      const conversation = await storage.getDmConversation(req.params.conversationId, actor.id);
+      if (!conversation || conversation.status !== "accepted") {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      const result = await storage.toggleDmMessageReaction(
+        conversation.id,
+        req.params.messageId,
+        actor.id,
+        parsed.emoji,
+      );
+      const count = result.reactions.find((reaction) => reaction.emoji === parsed.emoji)?.count || 0;
+      const payload = {
+        conversationId: conversation.id,
+        messageId: req.params.messageId,
+        emoji: parsed.emoji,
+        count,
+        userId: actor.id,
+        added: result.added,
+      };
+      for (const participantId of [conversation.participantOneId, conversation.participantTwoId]) {
+        ioFor(app)?.to(`user:${participantId}`).emit("dm:reaction", payload);
+      }
+      res.json(result);
+    } catch (error: any) {
+      sendError(res, error, "Failed to update direct message reaction");
     }
   });
 
@@ -836,6 +870,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(message);
       } catch (error) {
         sendError(res, error, "Failed to vote on poll");
+      }
+    },
+  );
+
+  app.post(
+    "/api/messages/:messageId/reactions",
+    isAuthenticated,
+    async (req: any, res: Response) => {
+      try {
+        const actor = await activeUser(req, res);
+        if (!actor) return;
+        const parsed = toggleMessageReactionSchema.parse(req.body);
+        const channel = await storage.getChannelForMessage(req.params.messageId);
+        if (
+          !channel ||
+          channel.serverId !== "main" ||
+          (isStaffChannel(channel.name) && !actor.isAdmin)
+        ) {
+          return res.status(404).json({ message: "Message not found" });
+        }
+        const result = await storage.toggleMessageReaction(
+          req.params.messageId,
+          actor.id,
+          parsed.emoji,
+        );
+        const count = result.reactions.find((reaction) => reaction.emoji === parsed.emoji)?.count || 0;
+        ioFor(app)?.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:reaction", {
+          channelId: channel.id,
+          messageId: req.params.messageId,
+          emoji: parsed.emoji,
+          count,
+          userId: actor.id,
+          added: result.added,
+        });
+        res.json(result);
+      } catch (error: any) {
+        sendError(res, error, "Failed to update message reaction");
       }
     },
   );

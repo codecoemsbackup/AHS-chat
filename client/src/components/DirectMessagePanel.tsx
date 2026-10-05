@@ -1,7 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, MessageSquare, Send, X } from "lucide-react";
-import type { DmConversationWithPeer, DmMessageWithSender, MessagePage } from "@shared/schema";
+import type {
+  DmConversationWithPeer,
+  DmMessageWithSender,
+  MessagePage,
+  MessageReactionSummary,
+} from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -158,6 +163,25 @@ export default function DirectMessagePanel({
     }
   };
 
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    const result: { added: boolean; reactions: MessageReactionSummary[] } = await apiRequest(
+      `${messagesUrl}/${messageId}/reactions`,
+      "POST",
+      { emoji },
+    );
+    queryClient.setQueryData<MessagePage<DmMessageWithSender>>(
+      [messagesUrl],
+      (current) => current
+        ? {
+            ...current,
+            messages: current.messages.map((message) =>
+              message.id === messageId ? { ...message, reactions: result.reactions } : message,
+            ),
+          }
+        : current,
+    );
+  };
+
   return (
     <>
       <header className="chat-main-header glass-panel flex h-[4.5rem] shrink-0 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6">
@@ -212,6 +236,8 @@ export default function DirectMessagePanel({
                     isSent={message.senderId === currentUserId}
                     senderName={message.sender.username || message.sender.firstName || "Member"}
                     avatarUrl={message.sender.profileImageUrl}
+                    reactions={message.reactions}
+                    onToggleReaction={(emoji) => toggleReaction(message.id, emoji)}
                   />
                 ))
               ) : (

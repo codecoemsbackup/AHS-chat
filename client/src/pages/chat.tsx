@@ -33,6 +33,8 @@ import type {
   DmMessageWithSender,
   MessageReplyPreview,
   MessagePage,
+  MessageReactionEvent,
+  MessageReactionSummary,
   Server,
   ServerMessageWithRelations,
   User,
@@ -53,6 +55,7 @@ import ServerSettingsDialog, {
   type ServerMember,
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
+import { applyReactionEvent } from "@/lib/messageReactions";
 import {
   Dialog,
   DialogContent,
@@ -412,6 +415,26 @@ export default function ChatPage() {
           : old,
       );
     };
+    const handleMessageReaction = (
+      event: MessageReactionEvent & { channelId: string },
+    ) => {
+      queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
+        [`/api/channels/${event.channelId}/messages`],
+        (old) => old
+          ? {
+              ...old,
+              messages: old.messages.map((message) =>
+                message.id === event.messageId
+                  ? {
+                      ...message,
+                      reactions: applyReactionEvent(message.reactions, event, user.id),
+                    }
+                  : message,
+              ),
+            }
+          : old,
+      );
+    };
     const handlePollUpdated = ({
       channelId,
       messageId,
@@ -550,13 +573,35 @@ export default function ChatPage() {
     const handleDmUpdated = () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     };
+    const handleDmReaction = (
+      event: MessageReactionEvent & { conversationId: string },
+    ) => {
+      queryClient.setQueryData<MessagePage<DmMessageWithSender>>(
+        [`/api/dms/${event.conversationId}/messages`],
+        (old) => old
+          ? {
+              ...old,
+              messages: old.messages.map((message) =>
+                message.id === event.messageId
+                  ? {
+                      ...message,
+                      reactions: applyReactionEvent(message.reactions, event, user.id),
+                    }
+                  : message,
+              ),
+            }
+          : old,
+      );
+    };
 
     socket.on("message:receive", handleMessageReceive);
     socket.on("message:deleted", handleMessageDeleted);
+    socket.on("message:reaction", handleMessageReaction);
     socket.on("poll:updated", handlePollUpdated);
     socket.on("message:error", handleMessageError);
     socket.on("dm:message", handleDmMessage);
     socket.on("dm:updated", handleDmUpdated);
+    socket.on("dm:reaction", handleDmReaction);
     socket.on("member:typing", handleTyping);
     socket.on("member:status", handleMemberStatus);
     socket.on("member:updated", handleMemberUpdated);
@@ -570,10 +615,12 @@ export default function ChatPage() {
       socket.off("connect", handleSocketConnect);
       socket.off("disconnect", handleSocketDisconnect);
       socket.off("message:deleted", handleMessageDeleted);
+      socket.off("message:reaction", handleMessageReaction);
       socket.off("poll:updated", handlePollUpdated);
       socket.off("message:error", handleMessageError);
       socket.off("dm:message", handleDmMessage);
       socket.off("dm:updated", handleDmUpdated);
+      socket.off("dm:reaction", handleDmReaction);
       socket.off("member:typing", handleTyping);
       socket.off("member:status", handleMemberStatus);
       socket.off("member:updated", handleMemberUpdated);
@@ -753,6 +800,25 @@ export default function ChatPage() {
       });
       return undefined;
     }
+  };
+
+  const toggleMessageReaction = async (channelId: string, messageId: string, emoji: string) => {
+    const result: { added: boolean; reactions: MessageReactionSummary[] } = await apiRequest(
+      `/api/messages/${messageId}/reactions`,
+      "POST",
+      { emoji },
+    );
+    queryClient.setQueryData<MessagePage<ServerMessageWithRelations>>(
+      [`/api/channels/${channelId}/messages`],
+      (old) => old
+        ? {
+            ...old,
+            messages: old.messages.map((message) =>
+              message.id === messageId ? { ...message, reactions: result.reactions } : message,
+            ),
+          }
+        : old,
+    );
   };
 
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1504,6 +1570,10 @@ export default function ChatPage() {
                               })
                             }
                             onVote={(optionIndexes) => voteOnPoll(message.id, optionIndexes)}
+                            reactions={message.reactions}
+                            onToggleReaction={(emoji) =>
+                              toggleMessageReaction(message.channelId, message.id, emoji)
+                            }
                           />
                         ) : <ChatBubble
                           message={message.content}
@@ -1539,6 +1609,10 @@ export default function ChatPage() {
                           }
                           canDelete={user.isAdmin}
                           onDelete={() => deleteMessageMutation.mutate(message.id)}
+                          reactions={message.reactions}
+                          onToggleReaction={(emoji) =>
+                            toggleMessageReaction(message.channelId, message.id, emoji)
+                          }
                         />}
                         </div>
                       );

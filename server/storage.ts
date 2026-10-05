@@ -4,8 +4,10 @@ import {
   channels,
   serverMessages,
   pollVotes,
+  messageReactions,
   dmConversations,
   dmMessages,
+  dmMessageReactions,
   bannedUsers,
   type User,
   type UpsertUser,
@@ -23,6 +25,7 @@ import {
   type DmConversation,
   type DmConversationWithPeer,
   type DmMessageWithSender,
+  type MessageReactionSummary,
 } from "@shared/schema";
 import { db } from "./db";
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
@@ -31,6 +34,20 @@ export const MAIN_SERVER_ID = "main";
 export const DEFAULT_CHANNEL_NAME = "general";
 
 export type ServerMember = User & { isBanned: boolean; banReason: string | null };
+
+function summarizeReactions(
+  rows: Array<{ emoji: string; userId: string }>,
+  userId: string,
+): MessageReactionSummary[] {
+  const grouped = new Map<string, { count: number; reactedByMe: boolean }>();
+  for (const row of rows) {
+    const summary = grouped.get(row.emoji) || { count: 0, reactedByMe: false };
+    summary.count += 1;
+    if (row.userId === userId) summary.reactedByMe = true;
+    grouped.set(row.emoji, summary);
+  }
+  return Array.from(grouped, ([emoji, summary]) => ({ emoji, ...summary }));
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -78,6 +95,11 @@ export interface IStorage {
   ): Promise<ServerMessageWithRelations>;
   createMessage(message: InsertServerMessage & { senderId: string }): Promise<ServerMessageWithRelations>;
   deleteMessage(messageId: string, deletedBy: string): Promise<void>;
+  getMessageReactions(messageIds: string[], userId: string): Promise<Map<string, MessageReactionSummary[]>>;
+  toggleMessageReaction(messageId: string, userId: string, emoji: string): Promise<{
+    added: boolean;
+    reactions: MessageReactionSummary[];
+  }>;
 
   getDmConversations(userId: string): Promise<DmConversationWithPeer[]>;
   getDmConversation(conversationId: string, userId: string): Promise<DmConversationWithPeer | undefined>;
@@ -86,8 +108,14 @@ export interface IStorage {
   getDmMessages(
     conversationId: string,
     pagination: MessagePagination,
+    userId: string,
   ): Promise<MessagePage<DmMessageWithSender>>;
   createDmMessage(conversationId: string, senderId: string, content: string): Promise<DmMessageWithSender>;
+  getDmMessageReactions(messageIds: string[], userId: string): Promise<Map<string, MessageReactionSummary[]>>;
+  toggleDmMessageReaction(conversationId: string, messageId: string, userId: string, emoji: string): Promise<{
+    added: boolean;
+    reactions: MessageReactionSummary[];
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -295,6 +323,29 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`CREATE INDEX IF NOT EXISTS poll_votes_message_idx ON poll_votes (message_id)`);
   }
 
+  async ensureMessageReactionsSchema(): Promise<void> {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS message_reactions (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      message_id varchar NOT NULL REFERENCES server_messages(id) ON DELETE CASCADE,
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji varchar(32) NOT NULL,
+      created_at timestamp DEFAULT now(),
+      CONSTRAINT message_reactions_message_user_emoji_unique UNIQUE (message_id, user_id, emoji)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS message_reactions_message_idx
+      ON message_reactions (message_id)`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS dm_message_reactions (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      message_id varchar NOT NULL REFERENCES dm_messages(id) ON DELETE CASCADE,
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji varchar(32) NOT NULL,
+      created_at timestamp DEFAULT now(),
+      CONSTRAINT dm_message_reactions_message_user_emoji_unique UNIQUE (message_id, user_id, emoji)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS dm_message_reactions_message_idx
+      ON dm_message_reactions (message_id)`);
+  }
+
   async getChannels(): Promise<Channel[]> {
     await this.ensureServer();
     return db
@@ -484,12 +535,22 @@ export class DatabaseStorage implements IStorage {
       current.push(vote);
       votesByMessage.set(vote.messageId, current);
     }
+    const reactionsByMessage = await this.getMessageReactions(
+      visibleMessages.map((message) => message.id),
+      userId,
+    );
     const formattedMessages = await Promise.all(
       visibleMessages.map(async (message) => {
         const withReply = await this.withReplyPreview(message);
-        if (!message.pollData) return withReply;
+        if (!message.pollData) {
+          return {
+            ...withReply,
+            reactions: reactionsByMessage.get(message.id) || [],
+          };
+        }
         return {
           ...withReply,
+          reactions: reactionsByMessage.get(message.id) || [],
           pollResults: this.buildPollResults(
             message.pollData,
             votesByMessage.get(message.id) || [],
@@ -554,7 +615,7 @@ export class DatabaseStorage implements IStorage {
     userId?: string,
     includeVoters = false,
   ): Promise<ServerMessageWithRelations> {
-    const [withReply, votes] = await Promise.all([
+    const [withReply, votes, reactionsByMessage] = await Promise.all([
       this.withReplyPreview(message),
       db
         .select({
@@ -566,10 +627,14 @@ export class DatabaseStorage implements IStorage {
         .from(pollVotes)
         .innerJoin(users, eq(users.id, pollVotes.userId))
         .where(eq(pollVotes.messageId, message.id)),
+      this.getMessageReactions([message.id], userId || ""),
     ]);
-    if (!message.pollData) return withReply;
+    if (!message.pollData) {
+      return { ...withReply, reactions: reactionsByMessage.get(message.id) || [] };
+    }
     return {
       ...withReply,
+      reactions: reactionsByMessage.get(message.id) || [],
       pollResults: this.buildPollResults(message.pollData, votes, userId, includeVoters),
     };
   }
@@ -641,6 +706,76 @@ export class DatabaseStorage implements IStorage {
       .update(serverMessages)
       .set({ deletedAt: new Date(), deletedBy })
       .where(eq(serverMessages.id, messageId));
+  }
+
+  async getMessageReactions(
+    messageIds: string[],
+    userId: string,
+  ): Promise<Map<string, MessageReactionSummary[]>> {
+    if (!messageIds.length) return new Map();
+    const rows = await db
+      .select({
+        messageId: messageReactions.messageId,
+        emoji: messageReactions.emoji,
+        userId: messageReactions.userId,
+      })
+      .from(messageReactions)
+      .where(inArray(messageReactions.messageId, messageIds));
+    const grouped = new Map<string, Array<{ emoji: string; userId: string }>>();
+    for (const row of rows) {
+      const current = grouped.get(row.messageId) || [];
+      current.push(row);
+      grouped.set(row.messageId, current);
+    }
+    return new Map(
+      Array.from(grouped, ([id, reactions]) => [id, summarizeReactions(reactions, userId)]),
+    );
+  }
+
+  async toggleMessageReaction(
+    messageId: string,
+    userId: string,
+    emoji: string,
+  ): Promise<{ added: boolean; reactions: MessageReactionSummary[] }> {
+    let added = false;
+    await db.transaction(async (transaction) => {
+      const [message] = await transaction
+        .select({ id: serverMessages.id })
+        .from(serverMessages)
+        .where(and(eq(serverMessages.id, messageId), isNull(serverMessages.deletedAt)))
+        .for("update");
+      if (!message) throw new Error("Message not found");
+
+      const [existing] = await transaction
+        .select({ id: messageReactions.id })
+        .from(messageReactions)
+        .where(
+          and(
+            eq(messageReactions.messageId, messageId),
+            eq(messageReactions.userId, userId),
+            eq(messageReactions.emoji, emoji),
+          ),
+        );
+      if (existing) {
+        await transaction.delete(messageReactions).where(eq(messageReactions.id, existing.id));
+        return;
+      }
+
+      const [count] = await transaction
+        .select({ count: sql<number>`count(*)::int` })
+        .from(messageReactions)
+        .where(
+          and(
+            eq(messageReactions.messageId, messageId),
+            eq(messageReactions.userId, userId),
+          ),
+        );
+      if (count.count >= 10) throw new Error("You can add up to 10 reactions per message");
+      await transaction.insert(messageReactions).values({ messageId, userId, emoji });
+      added = true;
+    });
+    const reactionsByMessage = await this.getMessageReactions([messageId], userId);
+    return { added, reactions: reactionsByMessage.get(messageId) || [] };
   }
 
   async getDmConversations(userId: string): Promise<DmConversationWithPeer[]> {
@@ -781,6 +916,7 @@ export class DatabaseStorage implements IStorage {
   async getDmMessages(
     conversationId: string,
     pagination: MessagePagination,
+    userId: string,
   ): Promise<MessagePage<DmMessageWithSender>> {
     const conditions = [eq(dmMessages.conversationId, conversationId)];
     if (pagination.beforeCreatedAt && pagination.beforeId) {
@@ -803,8 +939,13 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(dmMessages.createdAt), desc(dmMessages.id))
       .limit(pagination.limit + 1);
     const hasMore = rows.length > pagination.limit;
+    const pageRows = rows.slice(0, pagination.limit).reverse();
+    const reactionsByMessage = await this.getDmMessageReactions(
+      pageRows.map(({ message }) => message.id),
+      userId,
+    );
     return {
-      messages: rows.slice(0, pagination.limit).reverse().map(({ message, sender }) => ({
+      messages: pageRows.map(({ message, sender }) => ({
         ...message,
         sender: {
           id: sender.id,
@@ -812,6 +953,7 @@ export class DatabaseStorage implements IStorage {
           firstName: sender.firstName,
           profileImageUrl: sender.profileImageUrl,
         },
+        reactions: reactionsByMessage.get(message.id) || [],
       })),
       hasMore,
     };
@@ -843,6 +985,77 @@ export class DatabaseStorage implements IStorage {
         profileImageUrl: sender.profileImageUrl,
       },
     };
+  }
+
+  async getDmMessageReactions(
+    messageIds: string[],
+    userId: string,
+  ): Promise<Map<string, MessageReactionSummary[]>> {
+    if (!messageIds.length) return new Map();
+    const rows = await db
+      .select({
+        messageId: dmMessageReactions.messageId,
+        emoji: dmMessageReactions.emoji,
+        userId: dmMessageReactions.userId,
+      })
+      .from(dmMessageReactions)
+      .where(inArray(dmMessageReactions.messageId, messageIds));
+    const grouped = new Map<string, Array<{ emoji: string; userId: string }>>();
+    for (const row of rows) {
+      const current = grouped.get(row.messageId) || [];
+      current.push(row);
+      grouped.set(row.messageId, current);
+    }
+    return new Map(
+      Array.from(grouped, ([id, reactions]) => [id, summarizeReactions(reactions, userId)]),
+    );
+  }
+
+  async toggleDmMessageReaction(
+    conversationId: string,
+    messageId: string,
+    userId: string,
+    emoji: string,
+  ): Promise<{ added: boolean; reactions: MessageReactionSummary[] }> {
+    let added = false;
+    await db.transaction(async (transaction) => {
+      const [message] = await transaction
+        .select({ id: dmMessages.id })
+        .from(dmMessages)
+        .where(and(eq(dmMessages.id, messageId), eq(dmMessages.conversationId, conversationId)))
+        .for("update");
+      if (!message) throw new Error("Message not found");
+
+      const [existing] = await transaction
+        .select({ id: dmMessageReactions.id })
+        .from(dmMessageReactions)
+        .where(
+          and(
+            eq(dmMessageReactions.messageId, messageId),
+            eq(dmMessageReactions.userId, userId),
+            eq(dmMessageReactions.emoji, emoji),
+          ),
+        );
+      if (existing) {
+        await transaction.delete(dmMessageReactions).where(eq(dmMessageReactions.id, existing.id));
+        return;
+      }
+
+      const [count] = await transaction
+        .select({ count: sql<number>`count(*)::int` })
+        .from(dmMessageReactions)
+        .where(
+          and(
+            eq(dmMessageReactions.messageId, messageId),
+            eq(dmMessageReactions.userId, userId),
+          ),
+        );
+      if (count.count >= 10) throw new Error("You can add up to 10 reactions per message");
+      await transaction.insert(dmMessageReactions).values({ messageId, userId, emoji });
+      added = true;
+    });
+    const reactionsByMessage = await this.getDmMessageReactions([messageId], userId);
+    return { added, reactions: reactionsByMessage.get(messageId) || [] };
   }
 }
 

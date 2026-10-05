@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, ListChecks, Reply, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { PollDefinition, PollResults, ServerMessageWithRelations } from "@shared/schema";
+import type {
+  MessageReactionSummary,
+  PollDefinition,
+  PollResults,
+  ServerMessageWithRelations,
+} from "@shared/schema";
+import MessageReactions from "@/components/MessageReactions";
 
 interface PollCardProps {
   poll: PollDefinition;
@@ -13,6 +19,8 @@ interface PollCardProps {
   onDelete?: () => void;
   onReply?: () => void;
   onVote: (optionIndexes: number[]) => Promise<ServerMessageWithRelations | undefined>;
+  reactions?: MessageReactionSummary[];
+  onToggleReaction?: (emoji: string) => Promise<void>;
 }
 
 export default function PollCard({
@@ -25,6 +33,8 @@ export default function PollCard({
   onDelete,
   onReply,
   onVote,
+  reactions = [],
+  onToggleReaction,
 }: PollCardProps) {
   const [selectedOptions, setSelectedOptions] = useState<number[]>(results.userOptionIndexes);
   const [isSaving, setIsSaving] = useState(false);
@@ -139,6 +149,9 @@ export default function PollCard({
           );
         })}
       </div>
+      {onToggleReaction && (
+        <MessageReactions reactions={reactions} onToggle={onToggleReaction} />
+      )}
       {canViewVoters && votersExpanded && (
         <div className="mt-4 space-y-3 border-t pt-3">
           <h4 className="text-sm font-semibold">Votes by answer</h4>
