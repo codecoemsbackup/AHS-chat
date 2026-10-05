@@ -212,7 +212,7 @@ export default function ChatBubble({
           )}
           </div>
           <div
-            className={`absolute top-1/2 flex -translate-y-1/2 items-center ${
+            className={`absolute -top-5 flex items-center gap-1 ${
               isSent ? "left-full ml-1" : "right-full mr-1"
             }`}
           >
