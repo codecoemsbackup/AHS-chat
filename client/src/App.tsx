@@ -29,6 +29,8 @@ function Router() {
       {isAuthenticated ? (
         <>
           <Route path="/" component={ChatPage} />
+          <Route path="/server/:channel" component={ChatPage} />
+          <Route path="/dms/:user" component={ChatPage} />
         </>
       ) : (
         <>

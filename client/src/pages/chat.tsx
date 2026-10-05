@@ -61,6 +61,7 @@ import EmailSetup from "@/components/EmailSetup";
 import AppearanceSettingsDialog from "@/components/AppearanceSettingsDialog";
 import { applyUserThemeColor } from "@/lib/userAppearance";
 import { applyReactionEvent } from "@/lib/messageReactions";
+import { useLocation } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -138,10 +139,27 @@ function isStaffChannel(channelName: string) {
   return channelName.trim().toLowerCase() === "staff";
 }
 
+function getChannelPath(channel: Channel) {
+  return `/server/${encodeURIComponent(channel.name.trim().toLowerCase())}`;
+}
+
+function getDmPath(conversation: DmConversationWithPeer) {
+  return `/dms/${encodeURIComponent(conversation.peer.username || conversation.peer.id)}`;
+}
+
+function decodePathSegment(segment: string) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export default function ChatPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location, setLocation] = useLocation();
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedDmId, setSelectedDmId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
@@ -203,7 +221,10 @@ export default function ChatPage() {
     queryKey: ["/api/server"],
     enabled: !!user,
   });
-  const { data: dmConversations = [] } = useQuery<DmConversationWithPeer[]>({
+  const {
+    data: dmConversations = [],
+    isLoading: dmConversationsLoading,
+  } = useQuery<DmConversationWithPeer[]>({
     queryKey: ["/api/dms"],
     enabled: !!user,
   });
@@ -246,6 +267,59 @@ export default function ChatPage() {
     enabled: !!activeChannelId,
   });
   const messages = messagePage?.messages || [];
+
+  useEffect(() => {
+    if (location === "/" || location === "") {
+      if (!channels.length) return;
+      setSelectedDmId(null);
+      setSelectedChannelId(defaultChannel?.id || null);
+      if (defaultChannel) setLocation(getChannelPath(defaultChannel));
+      return;
+    }
+
+    const channelMatch = location.match(/^\/server\/([^/]+)\/?$/);
+    if (channelMatch) {
+      if (!channels.length) return;
+      const channelName = decodePathSegment(channelMatch[1]).trim().toLowerCase();
+      const channel = channels.find(
+        (candidate) => candidate.name.trim().toLowerCase() === channelName,
+      );
+      if (channel) {
+        setSelectedDmId(null);
+        setSelectedChannelId(channel.id);
+      } else if (defaultChannel) {
+        setSelectedDmId(null);
+        setSelectedChannelId(defaultChannel.id);
+        setLocation(getChannelPath(defaultChannel));
+      }
+      return;
+    }
+
+    const dmMatch = location.match(/^\/dms\/([^/]+)\/?$/);
+    if (dmMatch) {
+      if (dmConversationsLoading) return;
+      const peerRoute = decodePathSegment(dmMatch[1]).toLowerCase();
+      const conversation = dmConversations.find(
+        (candidate) =>
+          candidate.peer.id.toLowerCase() === peerRoute ||
+          candidate.peer.username?.toLowerCase() === peerRoute,
+      );
+      if (conversation) {
+        setSelectedDmId(conversation.id);
+      } else if (defaultChannel) {
+        setSelectedDmId(null);
+        setSelectedChannelId(defaultChannel.id);
+        setLocation(getChannelPath(defaultChannel));
+      }
+    }
+  }, [
+    channels,
+    defaultChannel,
+    dmConversations,
+    dmConversationsLoading,
+    location,
+    setLocation,
+  ]);
 
   useEffect(() => {
     if (channels.length && (!selectedChannelId || !channels.some((channel) => channel.id === selectedChannelId))) {
@@ -1027,10 +1101,7 @@ export default function ChatPage() {
     <button
       key={channel.id}
       type="button"
-      onClick={() => {
-        setSelectedDmId(null);
-        setSelectedChannelId(channel.id);
-      }}
+      onClick={() => setLocation(getChannelPath(channel))}
       data-active={activeChannelId === channel.id}
       className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
         activeChannelId === channel.id
@@ -1079,12 +1150,17 @@ export default function ChatPage() {
   const openDirectMessage = async (member: ServerMember) => {
     const existing = dmConversations.find((conversation) => conversation.peer.id === member.id);
     if (existing) {
-      setSelectedDmId(existing.id);
+      setLocation(getDmPath(existing));
       return;
     }
     try {
       const conversation = await apiRequest("/api/dms", "POST", { recipientId: member.id });
-      setSelectedDmId(conversation.id);
+      queryClient.setQueryData<DmConversationWithPeer[]>(["/api/dms"], (current) =>
+        current
+          ? [conversation, ...current.filter((item) => item.id !== conversation.id)]
+          : [conversation],
+      );
+      setLocation(getDmPath(conversation));
       await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     } catch (error: any) {
       toast({
@@ -1099,7 +1175,7 @@ export default function ChatPage() {
     if (!selectedDm) return;
     try {
       await apiRequest(`/api/dms/${selectedDm.id}/request`, "PATCH", { accepted });
-      if (!accepted) setSelectedDmId(null);
+      if (!accepted && defaultChannel) setLocation(getChannelPath(defaultChannel));
       await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     } catch (error: any) {
       toast({
@@ -1449,7 +1525,7 @@ export default function ChatPage() {
                   <button
                     key={conversation.id}
                     type="button"
-                    onClick={() => setSelectedDmId(conversation.id)}
+                    onClick={() => setLocation(getDmPath(conversation))}
                   data-active={selectedDmId === conversation.id}
                   className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
                     selectedDmId === conversation.id
@@ -1513,7 +1589,9 @@ export default function ChatPage() {
             <DirectMessagePanel
               conversation={selectedDm}
               currentUserId={user.id}
-              onBack={() => setSelectedDmId(null)}
+              onBack={() => {
+                if (defaultChannel) setLocation(getChannelPath(defaultChannel));
+              }}
               onRespond={(accepted) => void respondToDmRequest(accepted)}
             />
           ) : activeChannel ? (
@@ -1815,6 +1893,11 @@ export default function ChatPage() {
                       >
                         {member.username || "Member"}
                       </span>
+                      {(member.customStatus || member.isAdmin) && (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {member.customStatus || "Admin"}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${
