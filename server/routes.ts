@@ -54,7 +54,7 @@ function publicUser(user: any, viewer?: { id: string; isOwner: boolean }) {
   const canViewRealName = viewer?.isOwner || viewer?.id === user.id;
   return {
     ...safeUser,
-    email: viewer?.id === user.id ? email : null,
+    email: viewer?.isOwner || viewer?.id === user.id ? email : null,
     firstName: canViewRealName ? safeUser.firstName : null,
     lastName: canViewRealName ? safeUser.lastName : null,
     status: safeUser.status === "online" ? "online" : "offline",

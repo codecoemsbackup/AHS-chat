@@ -145,6 +145,7 @@ export default function ChatPage() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedDmId, setSelectedDmId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
+  const [selectedMember, setSelectedMember] = useState<ServerMember | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
@@ -1259,6 +1260,38 @@ export default function ChatPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={selectedMember !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedMember(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedMember?.username || "Member profile"}</DialogTitle>
+            <DialogDescription>
+              {selectedMember?.status === "online" && !selectedMember.isBanned ? "Online" : "Offline"}
+              {selectedMember?.customStatus ? ` · ${selectedMember.customStatus}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedMember && (user.isOwner || selectedMember.id === user.id) ? (
+            <div className="space-y-3 rounded-lg border p-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Real name</p>
+                <p>{[selectedMember.firstName, selectedMember.lastName].filter(Boolean).join(" ") || "Not provided"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Email</p>
+                <p className="break-all">{selectedMember.email || "Not provided"}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Real names and email addresses are visible only to owner-role accounts.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="app-shell flex h-dvh min-h-0 overflow-hidden">
         <aside className="chat-sidebar glass-panel flex min-h-0 w-[280px] shrink-0 flex-col border-y-0 border-l-0 border-r border-sidebar-border">
@@ -1761,48 +1794,47 @@ export default function ChatPage() {
             <div className="space-y-1">
               {filteredMembers.map((member) => (
                 <div key={member.id} className={`chat-member-row flex items-center gap-2 px-2 py-2 ${member.isBanned ? "opacity-50" : ""}`}>
-                  <UserAvatar
-                    name={member.username || member.firstName || "Member"}
-                    avatarUrl={member.profileImageUrl || undefined}
-                    size="sm"
-                    showOnlineStatus
-                    isOnline={member.status === "online" && !member.isBanned}
-                    isDoNotDisturb={member.doNotDisturb}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="truncate text-sm"
-                      style={{ color: member.usernameColor }}
-                    >
-                      {member.username || member.firstName || "Member"}
-                    </p>
-                    {(member.firstName || member.lastName) && (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[member.firstName, member.lastName].filter(Boolean).join(" ")}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {member.isBanned
-                        ? "Banned"
-                        : member.customStatus || (member.isAdmin ? "Admin" : "Member")}
-                    </p>
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setSelectedMember(member)}
+                    aria-label={`View ${member.username || "member"} profile`}
+                  >
+                    <UserAvatar
+                      name={member.username || "Member"}
+                      avatarUrl={member.profileImageUrl || undefined}
+                      size="sm"
+                      showOnlineStatus
+                      isOnline={member.status === "online" && !member.isBanned}
+                      isDoNotDisturb={member.doNotDisturb}
+                    />
+                    <span className="min-w-0 flex-1">
                       <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          member.doNotDisturb
-                            ? "bg-red-500"
-                            : member.status === "online" && !member.isBanned
-                            ? "bg-status-online"
-                            : "bg-status-offline"
-                        }`}
-                      />
-                      {member.doNotDisturb
-                        ? "Do not disturb"
-                        : member.status === "online" && !member.isBanned
-                          ? "Online"
-                          : "Offline"}
-                    </p>
-                  </div>
+                        className="block truncate text-sm"
+                        style={{ color: member.usernameColor }}
+                      >
+                        {member.username || "Member"}
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            member.doNotDisturb
+                              ? "bg-red-500"
+                              : member.status === "online" && !member.isBanned
+                              ? "bg-status-online"
+                              : "bg-status-offline"
+                          }`}
+                        />
+                        {member.isBanned
+                          ? "Banned"
+                          : member.doNotDisturb
+                            ? "Do not disturb"
+                            : member.status === "online"
+                              ? "Online"
+                              : "Offline"}
+                      </span>
+                    </span>
+                  </button>
                   {!member.isBanned && member.id !== user.id && (
                     <Button
                       variant="ghost"

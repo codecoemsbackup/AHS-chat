@@ -6,7 +6,7 @@ Discord: CodeCoems
 
 Members can start private direct-message conversations from the member list. New conversations are message requests; recipients must accept before either member can read or send messages.
 
-New accounts must provide a real first and last name and a PISD email ending in `.number@mypisd.net` or `@pisd.edu`. Signed-in users without an email are prompted to add one before using the server. Names are visible only to the account holder and owner-role accounts; users missing a name must complete the setup step before using the server.
+New accounts must provide a real first and last name and a PISD email ending in `.number@mypisd.net` or `@pisd.edu`. Signed-in users without an email are prompted to add one before using the server. Real names and email addresses are visible only to the account holder and owner-role accounts; users missing a name must complete the setup step before using the server. Member rows show usernames and online status; clicking a member opens their profile details where permitted.
 
 Messages, including private messages and polls, support emoji reactions. Each person can add up to 10 distinct emoji reactions to a message and remove them by selecting them again.
 
