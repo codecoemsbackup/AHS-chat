@@ -22,6 +22,7 @@ export default function SignupPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
@@ -40,6 +41,7 @@ export default function SignupPage() {
     mutationFn: () =>
       apiRequest("/api/auth/local/signup", "POST", {
         username: normalizedUsername,
+        email: email.trim().toLowerCase(),
         password,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -103,6 +105,22 @@ export default function SignupPage() {
                     required
                     data-testid="input-first-name"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">PISD email</Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="name.123@mypisd.net or name@pisd.edu"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    autoComplete="email"
+                    required
+                    data-testid="input-email"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use an address ending in .<span className="font-mono">number</span>@mypisd.net or @pisd.edu.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-last-name">Last name</Label>

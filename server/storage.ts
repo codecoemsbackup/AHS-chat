@@ -53,7 +53,9 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  createLocalUser(username: string, passwordHash: string, firstName: string, lastName: string): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  updateEmail(userId: string, email: string): Promise<User>;
+  createLocalUser(username: string, email: string, passwordHash: string, firstName: string, lastName: string): Promise<User>;
   updateRealName(userId: string, firstName: string, lastName: string): Promise<User>;
   updateUserStatus(userId: string, status: string): Promise<void>;
   updateCustomStatus(userId: string, customStatus: string | null): Promise<User>;
@@ -160,15 +162,33 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.email}) = lower(${email})`);
+    return user;
+  }
+
+  async updateEmail(userId: string, email: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ email, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
   async createLocalUser(
     username: string,
+    email: string,
     passwordHash: string,
     firstName: string,
     lastName: string,
   ): Promise<User> {
     const [user] = await db
       .insert(users)
-      .values({ username, passwordHash, firstName, lastName })
+      .values({ username, email, passwordHash, firstName, lastName })
       .returning();
     await this.ensureServer();
     return user;

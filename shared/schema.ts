@@ -351,11 +351,21 @@ export const banUserSchema = z.object({
   reason: z.string().trim().max(200).optional(),
 });
 
+const pisdEmailSchema = z.string().trim().email().refine(
+  (email) => /^(?:[^@.]+(?:\.[^@.]+)*\.\d+@mypisd\.net|[^@]+@pisd\.edu)$/i.test(email),
+  "Use a PISD email ending in .<number>@mypisd.net or @pisd.edu",
+).transform((email) => email.toLowerCase());
+
 export const localSignupSchema = z.object({
   username: z.string().trim().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/),
+  email: pisdEmailSchema,
   password: z.string().min(8).max(128),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
+});
+
+export const updateEmailSchema = z.object({
+  email: pisdEmailSchema,
 });
 
 export const updateRealNameSchema = z.object({

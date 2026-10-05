@@ -57,6 +57,7 @@ import ServerSettingsDialog, {
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
 import RealNameSetup from "@/components/RealNameSetup";
+import EmailSetup from "@/components/EmailSetup";
 import AppearanceSettingsDialog from "@/components/AppearanceSettingsDialog";
 import { applyUserThemeColor } from "@/lib/userAppearance";
 import { applyReactionEvent } from "@/lib/messageReactions";
@@ -1163,6 +1164,9 @@ export default function ChatPage() {
   }
 
   if (!user) return null;
+  if (!user.email) {
+    return <EmailSetup />;
+  }
   if (!user.firstName?.trim() || !user.lastName?.trim()) {
     return <RealNameSetup />;
   }

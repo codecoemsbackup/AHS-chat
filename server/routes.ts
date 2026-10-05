@@ -26,6 +26,7 @@ import {
   localSignupSchema,
   localLoginSchema,
   updateRealNameSchema,
+  updateEmailSchema,
   createPollSchema,
   voteOnPollSchema,
   messagePaginationSchema,
@@ -49,10 +50,11 @@ function isStaffChannel(channelName: string) {
 }
 
 function publicUser(user: any, viewer?: { id: string; isOwner: boolean }) {
-  const { passwordHash: _passwordHash, ...safeUser } = user;
+  const { passwordHash: _passwordHash, email, ...safeUser } = user;
   const canViewRealName = viewer?.isOwner || viewer?.id === user.id;
   return {
     ...safeUser,
+    email: viewer?.id === user.id ? email : null,
     firstName: canViewRealName ? safeUser.firstName : null,
     lastName: canViewRealName ? safeUser.lastName : null,
     status: safeUser.status === "online" ? "online" : "offline",
@@ -155,8 +157,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existing) {
         return res.status(409).json({ message: "That username is already taken" });
       }
+      const existingEmail = await storage.getUserByEmail(parsed.email);
+      if (existingEmail) {
+        return res.status(409).json({ message: "That email is already associated with an account" });
+      }
       const user = await storage.createLocalUser(
         parsed.username,
+        parsed.email,
         await hashPassword(parsed.password),
         parsed.firstName,
         parsed.lastName,
@@ -213,6 +220,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(publicUser(user, user));
     } catch (error: any) {
       sendError(res, error, "Failed to save real name");
+    }
+  });
+
+  app.patch("/api/profile/email", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res, false);
+      if (!actor) return;
+      const parsed = updateEmailSchema.parse(req.body);
+      const existing = await storage.getUserByEmail(parsed.email);
+      if (existing && existing.id !== actor.id) {
+        return res.status(409).json({ message: "That email is already associated with an account" });
+      }
+      const user = await storage.updateEmail(actor.id, parsed.email);
+      ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
+      res.json(publicUser(user, user));
+    } catch (error: any) {
+      sendError(res, error, "Failed to save email");
     }
   });
 
