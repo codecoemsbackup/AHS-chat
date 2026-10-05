@@ -31,6 +31,7 @@ import {
   voteOnPollSchema,
   messagePaginationSchema,
   toggleMessageReactionSchema,
+  isValidUsername,
 } from "@shared/schema";
 import {
   MAX_ATTACHMENT_BYTES,
@@ -137,10 +138,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/username-available", async (req: any, res: Response) => {
     const username = String(req.query.username || "").trim();
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    if (!isValidUsername(username)) {
       return res.json({
         available: false,
-        reason: "Use 3-20 letters, numbers, or underscores.",
+        reason: "Use 3-20 letters or numbers from any language, or underscores.",
       });
     }
     const existing = await storage.getUserByUsername(username);

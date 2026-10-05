@@ -317,8 +317,15 @@ export const respondToDmRequestSchema = z.object({
   accepted: z.boolean(),
 });
 
+export const USERNAME_PATTERN = new RegExp("^[\\p{L}\\p{M}\\p{N}_]+$", "u");
+
+export function isValidUsername(username: string): boolean {
+  const length = Array.from(username).length;
+  return length >= 3 && length <= 20 && USERNAME_PATTERN.test(username);
+}
+
 export const updateUsernameSchema = z.object({
-  username: z.string().trim().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/),
+  username: z.string().trim().refine(isValidUsername, "Use 3-20 letters or numbers from any language, or underscores."),
 });
 
 export const updateCustomStatusSchema = z.object({
@@ -357,7 +364,7 @@ const pisdEmailSchema = z.string().trim().email().refine(
 ).transform((email) => email.toLowerCase());
 
 export const localSignupSchema = z.object({
-  username: z.string().trim().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/),
+  username: z.string().trim().refine(isValidUsername, "Use 3-20 letters or numbers from any language, or underscores."),
   email: pisdEmailSchema,
   password: z.string().min(8).max(128),
   firstName: z.string().trim().min(1).max(80),

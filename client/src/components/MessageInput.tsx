@@ -94,7 +94,7 @@ export default function MessageInput({
 
   const activeMention = useMemo(() => {
     const beforeCursor = message.slice(0, cursorPosition);
-    const match = beforeCursor.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+    const match = new RegExp("(?:^|\\s)@([\\p{L}\\p{M}\\p{N}_]*)$", "u").exec(beforeCursor);
     if (!match) return null;
     return {
       query: match[1].toLowerCase(),

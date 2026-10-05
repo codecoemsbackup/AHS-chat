@@ -9,6 +9,7 @@ import { Check, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
+import { isValidUsername } from "@shared/schema";
 import ThemeToggle from "@/components/ThemeToggle";
 import BrandLogo from "@/components/BrandLogo";
 
@@ -28,7 +29,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const normalizedUsername = username.trim();
-  const usernameIsValid = /^[a-zA-Z0-9_]{3,20}$/.test(normalizedUsername);
+  const usernameIsValid = isValidUsername(normalizedUsername);
 
   const { data: availability, isFetching: checkingUsername } = useQuery<Availability>({
     queryKey: [
@@ -151,7 +152,7 @@ export default function SignupPage() {
                 />
                 <div className="min-h-5 text-xs">
                   {normalizedUsername.length > 0 && !usernameIsValid && (
-                    <p className="text-muted-foreground">Use 3-20 letters, numbers, or underscores.</p>
+                    <p className="text-muted-foreground">Use 3-20 letters or numbers from any language, or underscores.</p>
                   )}
                   {usernameIsValid && checkingUsername && (
                     <p className="text-muted-foreground">Checking username...</p>

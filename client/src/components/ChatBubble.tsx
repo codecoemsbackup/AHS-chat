@@ -108,7 +108,7 @@ export default function ChatBubble({
     .sort((a, b) => b.length - a.length)
     .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const mentionPattern = escapedMentionNames.length
-    ? new RegExp(`(@(?:${escapedMentionNames.join("|")}))(?=\\b|\\s|$|[.,!?])`, "gi")
+    ? new RegExp(`(@(?:${escapedMentionNames.join("|")}))(?=$|[^\\p{L}\\p{M}\\p{N}_])`, "giu")
     : null;
   const messageParts = mentionPattern ? message.split(mentionPattern) : [message];
   const gifLinks = getGifLinks(message);

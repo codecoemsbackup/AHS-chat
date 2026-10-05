@@ -12,6 +12,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { isValidUsername } from "@shared/schema";
 
 interface UsernameSetupProps {
   open: boolean;
@@ -46,7 +47,7 @@ export default function UsernameSetup({ open, onComplete }: UsernameSetupProps) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.trim().length >= 3) {
+    if (isValidUsername(username.trim())) {
       mutation.mutate(username);
     }
   };
@@ -74,13 +75,13 @@ export default function UsernameSetup({ open, onComplete }: UsernameSetupProps) 
               data-testid="input-username-setup"
             />
             <p className="text-xs text-muted-foreground">
-              3-20 characters, letters and numbers only
+              3-20 letters or numbers from any language, or underscores
             </p>
           </div>
           <Button
             type="submit"
             className="w-full"
-            disabled={username.length < 3 || mutation.isPending}
+            disabled={!isValidUsername(username.trim()) || mutation.isPending}
             data-testid="button-save-username"
           >
             {mutation.isPending ? "Saving..." : "Continue"}
