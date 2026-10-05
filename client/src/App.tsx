@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -41,6 +42,16 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    const confirmClose = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "Work may be lost.";
+    };
+
+    window.addEventListener("beforeunload", confirmClose);
+    return () => window.removeEventListener("beforeunload", confirmClose);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
