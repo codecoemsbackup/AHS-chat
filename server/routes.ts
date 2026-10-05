@@ -376,7 +376,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Tenor returned ${response.status}`);
-            const payload = (await response.json()) as {
+            const responseText = await response.text();
+            let payload: {
               results?: Array<{
                 id?: string;
                 content_description?: string;
@@ -384,6 +385,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }>;
               next?: string;
             };
+            try {
+              payload = JSON.parse(responseText);
+            } catch {
+              throw new Error("Tenor returned a non-JSON response");
+            }
             const gifs = (payload.results || []).flatMap((result) => {
               const formats = result.media_formats || {};
               const media = formats.gif || formats.mediumgif || formats.tinygif;
@@ -422,7 +428,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const response = await fetch(url);
             if (!response.ok) throw new Error(`GIPHY returned ${response.status}`);
-            const payload = (await response.json()) as {
+            const responseText = await response.text();
+            let payload: {
               data?: Array<{
                 id?: string;
                 title?: string;
@@ -434,6 +441,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }>;
               pagination?: { total_count?: number; offset?: number; count?: number };
             };
+            try {
+              payload = JSON.parse(responseText);
+            } catch {
+              throw new Error("GIPHY returned a non-JSON response");
+            }
             const gifs = (payload.data || []).flatMap((result) => {
               const media = result.images?.original;
               const preview = result.images?.fixed_width_small || result.images?.fixed_width || media;

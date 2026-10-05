@@ -162,7 +162,11 @@ export default function MessageInput({
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
       if (append && gifCursor) params.set("cursor", JSON.stringify(gifCursor));
-      const result = await apiRequest(`/api/gifs/search${params}`, "GET");
+      const queryString = params.toString();
+      const result = await apiRequest(
+        `/api/gifs/search${queryString ? `?${queryString}` : ""}`,
+        "GET",
+      );
       setGifResults((current) => {
         if (!append) return result.gifs || [];
         const existingIds = new Set(current.map((gif) => gif.id));

@@ -3,6 +3,15 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
+    if ((res.headers.get("content-type") || "").includes("application/json")) {
+      let body: { message?: unknown } | undefined;
+      try {
+        body = JSON.parse(text);
+      } catch {}
+      if (typeof body?.message === "string") {
+        throw new Error(`${res.status}: ${body.message}`);
+      }
+    }
     throw new Error(`${res.status}: ${text}`);
   }
 }
@@ -22,6 +31,15 @@ export async function apiRequest(
   await throwIfResNotOk(res);
   
   if (method === "GET" || method === "POST") {
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const responseText = await res.text();
+      const message = responseText.trimStart().startsWith("<!DOCTYPE html") ||
+        responseText.trimStart().startsWith("<html")
+        ? "The server returned a web page instead of API data. Refresh the page and try again."
+        : `Expected a JSON response but received ${contentType || "an unknown content type"}.`;
+      throw new Error(message);
+    }
     return await res.json();
   }
   
