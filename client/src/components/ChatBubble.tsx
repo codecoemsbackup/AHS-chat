@@ -55,7 +55,7 @@ export default function ChatBubble({
 
   return (
     <div
-      className={`group mb-2 flex w-full gap-3 ${isSent ? "justify-end" : "justify-start"}`}
+      className={`group mb-5 flex w-full gap-3 ${isSent ? "justify-end" : "justify-start"}`}
       data-testid={`message-${isSent ? "sent" : "received"}`}
     >
       {!isSent && senderName && (
@@ -86,14 +86,14 @@ export default function ChatBubble({
           </span>
         )}
         <div
-          className={`relative inline-flex h-fit max-w-full flex-col rounded-2xl px-4 py-2 shadow-sm transition-shadow group-hover:shadow-md ${
+          className={`relative inline-flex h-fit max-w-full rounded-2xl px-4 py-2 shadow-sm transition-shadow group-hover:shadow-md ${
             isSent
               ? "glass-bubble-sent rounded-br-md text-primary-foreground"
               : "glass-bubble rounded-bl-md border"
           } ${isMentionedUser ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-background" : ""}`}
         >
           {message && (
-            <p className="m-0 whitespace-pre-wrap break-words text-left text-sm leading-5">
+            <p className="m-0 whitespace-pre-wrap break-words text-center text-sm leading-5">
               {messageParts.map((part, index) => {
                 const isMention =
                   index % 2 === 1 &&
@@ -169,11 +169,7 @@ export default function ChatBubble({
           )}
         </div>
         {onToggleReaction && (
-          <MessageReactions
-            reactions={reactions}
-            onToggle={onToggleReaction}
-            positionWhenEmpty
-          />
+          <MessageReactions reactions={reactions} onToggle={onToggleReaction} />
         )}
         <span
           className={`pointer-events-none absolute -bottom-5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
