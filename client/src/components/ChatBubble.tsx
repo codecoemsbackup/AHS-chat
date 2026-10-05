@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { AtSign, Download, FileText, Reply, Trash2 } from "lucide-react";
 import UserAvatar from "./UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,42 @@ function getGifLinks(message: string): string[] {
     }
   }
   return Array.from(links);
+}
+
+function renderTextWithLinks(text: string, keyPrefix: string): ReactNode[] {
+  const urlPattern = /https?:\/\/[^\s<>]+/gi;
+  const rendered: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = urlPattern.exec(text)) !== null) {
+    const rawUrl = match[0];
+    const url = rawUrl.replace(/[),.!?;:\]]+$/, "");
+    if (!url) continue;
+    const start = match.index;
+    const end = start + url.length;
+    if (start > lastIndex) {
+      rendered.push(text.slice(lastIndex, start));
+    }
+    rendered.push(
+      <a
+        key={`${keyPrefix}-link-${start}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="break-all underline underline-offset-2 hover:opacity-80"
+      >
+        {url}
+      </a>,
+    );
+    if (end < start + rawUrl.length) {
+      rendered.push(rawUrl.slice(url.length));
+    }
+    lastIndex = start + rawUrl.length;
+  }
+
+  if (lastIndex < text.length) rendered.push(text.slice(lastIndex));
+  return rendered.length ? rendered : [text];
 }
 
 interface ChatBubbleProps {
@@ -136,7 +172,9 @@ export default function ChatBubble({
                     {part}
                   </span>
                 ) : (
-                  <Fragment key={`${part}-${index}`}>{part}</Fragment>
+                  <Fragment key={`${part}-${index}`}>
+                    {renderTextWithLinks(part, `message-${index}`)}
+                  </Fragment>
                 );
               })}
               {gifLinks.map((url) => (

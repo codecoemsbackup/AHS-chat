@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShieldCheck } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
@@ -56,22 +55,6 @@ export default function LoginPage() {
             <CardDescription>Choose how you want to enter the community server.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <Button asChild variant="outline" className="w-full h-11">
-              <a href="/api/login">
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                Continue with Replit
-              </a>
-            </Button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">or use your account</span>
-              </div>
-            </div>
-
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="login-username">Username</Label>
