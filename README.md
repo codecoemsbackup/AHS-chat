@@ -4,7 +4,7 @@ Gmail: codecoems@gmail.com
 Outlook: codecoems@outlook.com
 Discord: CodeCoems
 
-Members can start private direct-message conversations from the member list. New conversations are message requests; recipients must accept before either member can read or send messages. The sender can cancel a pending request.
+Members can start private direct-message conversations from the member list. New conversations are message requests; recipients must accept before either member can read or send messages. The sender can cancel a pending request. Accepted direct messages support replies with quoted message previews.
 
 Signed-in chat routes use `/server/<channel>` for channels and `/dms/<username>` for direct messages. The root route redirects to the default channel.
 

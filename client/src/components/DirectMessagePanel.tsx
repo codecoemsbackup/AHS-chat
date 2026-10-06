@@ -5,6 +5,7 @@ import type {
   DmConversationWithPeer,
   DmMessageWithSender,
   MessagePage,
+  MessageReplyPreview,
   MessageReactionSummary,
 } from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
@@ -35,6 +36,7 @@ export default function DirectMessagePanel({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [sending, setSending] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<MessageReplyPreview | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -137,7 +139,12 @@ export default function DirectMessagePanel({
     }
   };
 
-  const sendMessage = async (draft: string, file?: File, gif?: GifResult) => {
+  const sendMessage = async (
+    draft: string,
+    file?: File,
+    gif?: GifResult,
+    replyToId?: string,
+  ) => {
     const content = draft.trim();
     if ((!content && !file && !gif) || sending) return;
     setSending(true);
@@ -165,6 +172,7 @@ export default function DirectMessagePanel({
       }
       const message: DmMessageWithSender = await apiRequest(messagesUrl, "POST", {
         content,
+        replyToId,
         ...attachment,
       });
       queryClient.setQueryData<MessagePage<DmMessageWithSender>>(
@@ -175,6 +183,7 @@ export default function DirectMessagePanel({
             : { ...current, messages: [...current.messages, message] }
           : { messages: [message], hasMore: false },
       );
+      setReplyingTo(null);
       await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     } catch (error: any) {
       toast({
@@ -263,6 +272,16 @@ export default function DirectMessagePanel({
                     senderName={message.sender.username || message.sender.firstName || "Member"}
                     senderColor={message.sender.usernameColor}
                     avatarUrl={message.sender.profileImageUrl}
+                    reply={message.reply}
+                    onReply={() =>
+                      setReplyingTo({
+                        id: message.id,
+                        content: message.content,
+                        senderId: message.senderId,
+                        senderName:
+                          message.sender.username || message.sender.firstName || "Member",
+                      })
+                    }
                     attachment={
                       message.attachmentUrl &&
                       message.attachmentName &&
@@ -293,8 +312,14 @@ export default function DirectMessagePanel({
           <MessageInput
             placeholder={`Message ${peerName}`}
             isUploading={sending}
-            onSendMessage={(content, file) => sendMessage(content, file)}
-            onSendGif={(gif, content) => sendMessage(content, undefined, gif)}
+            replyTo={replyingTo || undefined}
+            onCancelReply={() => setReplyingTo(null)}
+            onSendMessage={(content, file, replyToId) =>
+              sendMessage(content, file, undefined, replyToId)
+            }
+            onSendGif={(gif, content, replyToId) =>
+              sendMessage(content, undefined, gif, replyToId)
+            }
             onFileError={(message) =>
               toast({
                 title: "File not attached",

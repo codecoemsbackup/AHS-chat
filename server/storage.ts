@@ -24,6 +24,7 @@ import {
   type MessagePagination,
   type DmConversation,
   type DmConversationWithPeer,
+  type DmMessage,
   type InsertDmMessage,
   type DmMessageWithSender,
   type MessageReactionSummary,
@@ -1091,7 +1092,9 @@ export class DatabaseStorage implements IStorage {
     return message;
   }
 
-  private async withDmReplyPreview(message: DmMessage): Promise<DmMessageWithSender> {
+  private async withDmReplyPreview(
+    message: DmMessage,
+  ): Promise<DmMessage & { reply?: MessageReplyPreview }> {
     if (!message.replyToId) return message;
     const [row] = await db
       .select({ message: dmMessages, sender: users })

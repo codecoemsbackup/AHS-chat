@@ -701,6 +701,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (await storage.isUserBanned(conversation.peer.id)) {
         return res.status(403).json({ message: "This member cannot receive messages" });
       }
+      if (
+        parsed.replyToId &&
+        !(await storage.getDmMessageInConversation(parsed.replyToId, conversation.id))
+      ) {
+        return res.status(400).json({ message: "The message you are replying to was not found" });
+      }
       const message = await storage.createDmMessage(conversation.id, actor.id, parsed);
       const peer = await storage.getUser(conversation.peer.id);
       for (const participantId of [conversation.participantOneId, conversation.participantTwoId]) {
