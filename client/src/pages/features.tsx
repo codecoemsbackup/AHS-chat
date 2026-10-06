@@ -25,6 +25,7 @@ const featureGroups = [
     features: [
       "Start private conversations with community members.",
       "New conversations arrive as message requests that recipients can accept or decline.",
+      "Send files and GIFs in accepted direct-message conversations.",
       "See unread DM counts and navigate directly to a conversation with /dms/<username>.",
     ],
   },

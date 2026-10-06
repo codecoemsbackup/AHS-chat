@@ -24,6 +24,7 @@ import {
   type MessagePagination,
   type DmConversation,
   type DmConversationWithPeer,
+  type InsertDmMessage,
   type DmMessageWithSender,
   type MessageReactionSummary,
 } from "@shared/schema";
@@ -115,7 +116,11 @@ export interface IStorage {
     userId: string,
     canViewRealNames?: boolean,
   ): Promise<MessagePage<DmMessageWithSender>>;
-  createDmMessage(conversationId: string, senderId: string, content: string): Promise<DmMessageWithSender>;
+  createDmMessage(
+    conversationId: string,
+    senderId: string,
+    message: InsertDmMessage,
+  ): Promise<DmMessageWithSender>;
   getDmMessageReactions(messageIds: string[], userId: string): Promise<Map<string, MessageReactionSummary[]>>;
   toggleDmMessageReaction(conversationId: string, messageId: string, userId: string, emoji: string): Promise<{
     added: boolean;
@@ -328,8 +333,16 @@ export class DatabaseStorage implements IStorage {
       conversation_id varchar NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
       sender_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       content text NOT NULL,
+      attachment_url varchar,
+      attachment_name varchar,
+      attachment_mime_type varchar,
+      attachment_size integer,
       created_at timestamp DEFAULT now()
     )`);
+    await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_url varchar`);
+    await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_name varchar`);
+    await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_mime_type varchar`);
+    await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_size integer`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS dm_messages_conversation_created_idx
       ON dm_messages (conversation_id, created_at)`);
   }
@@ -1046,11 +1059,11 @@ export class DatabaseStorage implements IStorage {
   async createDmMessage(
     conversationId: string,
     senderId: string,
-    content: string,
+    messageData: InsertDmMessage,
   ): Promise<DmMessageWithSender> {
     const [message] = await db
       .insert(dmMessages)
-      .values({ conversationId, senderId, content })
+      .values({ conversationId, senderId, ...messageData })
       .returning();
     await db
       .update(dmConversations)

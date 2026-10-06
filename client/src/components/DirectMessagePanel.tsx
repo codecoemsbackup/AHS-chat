@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, MessageSquare, Send, X } from "lucide-react";
+import { ArrowLeft, Check, MessageSquare, X } from "lucide-react";
 import type {
   DmConversationWithPeer,
   DmMessageWithSender,
@@ -8,10 +8,11 @@ import type {
   MessageReactionSummary,
 } from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
+import MessageInput, { type GifResult } from "@/components/MessageInput";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { fileToDataUrl } from "@/lib/fileUploads";
 import { apiRequest } from "@/lib/queryClient";
 
 const MESSAGE_PAGE_SIZE = 30;
@@ -31,7 +32,6 @@ export default function DirectMessagePanel({
 }: DirectMessagePanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -135,13 +135,36 @@ export default function DirectMessagePanel({
     }
   };
 
-  const sendMessage = async () => {
+  const sendMessage = async (draft: string, file?: File, gif?: GifResult) => {
     const content = draft.trim();
-    if (!content || sending) return;
+    if ((!content && !file && !gif) || sending) return;
     setSending(true);
-    setDraft("");
     try {
-      const message: DmMessageWithSender = await apiRequest(messagesUrl, "POST", { content });
+      let attachment;
+      if (file) {
+        const uploaded = await apiRequest("/api/uploads", "POST", {
+          dataUrl: await fileToDataUrl(file),
+          fileName: file.name,
+        });
+        attachment = {
+          attachmentUrl: uploaded.url,
+          attachmentName: uploaded.originalName,
+          attachmentMimeType: uploaded.mimeType,
+          attachmentSize: uploaded.size,
+        };
+      } else if (gif) {
+        const uploaded = await apiRequest("/api/gifs/import", "POST", { url: gif.url });
+        attachment = {
+          attachmentUrl: uploaded.url,
+          attachmentName: uploaded.originalName,
+          attachmentMimeType: uploaded.mimeType,
+          attachmentSize: uploaded.size,
+        };
+      }
+      const message: DmMessageWithSender = await apiRequest(messagesUrl, "POST", {
+        content,
+        ...attachment,
+      });
       queryClient.setQueryData<MessagePage<DmMessageWithSender>>(
         [messagesUrl],
         (current) => current
@@ -152,7 +175,6 @@ export default function DirectMessagePanel({
       );
       await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     } catch (error: any) {
-      setDraft((current) => current || content);
       toast({
         title: "Message not sent",
         description: error.message || "Please try again.",
@@ -239,6 +261,19 @@ export default function DirectMessagePanel({
                     senderName={message.sender.username || message.sender.firstName || "Member"}
                     senderColor={message.sender.usernameColor}
                     avatarUrl={message.sender.profileImageUrl}
+                    attachment={
+                      message.attachmentUrl &&
+                      message.attachmentName &&
+                      message.attachmentMimeType &&
+                      message.attachmentSize
+                        ? {
+                            url: message.attachmentUrl,
+                            name: message.attachmentName,
+                            mimeType: message.attachmentMimeType,
+                            size: message.attachmentSize,
+                          }
+                        : undefined
+                    }
                     reactions={message.reactions}
                     onToggleReaction={(emoji) => toggleReaction(message.id, emoji)}
                   />
@@ -253,32 +288,19 @@ export default function DirectMessagePanel({
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
-          <form
-            className="chat-composer glass-panel flex shrink-0 items-end gap-3 border-x-0 border-b-0 p-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void sendMessage();
-            }}
-          >
-            <Textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void sendMessage();
-                }
-              }}
-              placeholder={`Message ${peerName}`}
-              className="glass-control min-h-10 max-h-32 resize-none"
-              rows={1}
-              maxLength={2000}
-              aria-label={`Message ${peerName}`}
-            />
-            <Button type="submit" size="icon" disabled={!draft.trim() || sending} aria-label="Send direct message">
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
+          <MessageInput
+            placeholder={`Message ${peerName}`}
+            isUploading={sending}
+            onSendMessage={(content, file) => sendMessage(content, file)}
+            onSendGif={(gif, content) => sendMessage(content, undefined, gif)}
+            onFileError={(message) =>
+              toast({
+                title: "File not attached",
+                description: message,
+                variant: "destructive",
+              })
+            }
+          />
         </>
       ) : conversation.isIncoming ? (
         <div className="flex flex-1 items-center justify-center px-6 py-10">

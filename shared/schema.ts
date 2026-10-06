@@ -185,6 +185,10 @@ export const dmMessages = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
+    attachmentUrl: varchar("attachment_url"),
+    attachmentName: varchar("attachment_name"),
+    attachmentMimeType: varchar("attachment_mime_type"),
+    attachmentSize: integer("attachment_size"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => [
@@ -289,8 +293,29 @@ export const insertServerMessageSchema = createInsertSchema(serverMessages)
   });
 
 export const insertDmMessageSchema = z.object({
-  content: z.string().trim().min(1).max(2000),
+  content: z.string().trim().max(2000).default(""),
+  attachmentUrl: z.string().regex(/^\/uploads\/[a-z]+\/[^/]+$/, "Invalid attachment").optional(),
+  attachmentName: z.string().trim().min(1).max(120).optional(),
+  attachmentMimeType: z.string().trim().min(1).max(120).optional(),
+  attachmentSize: z.number().int().positive().max(8 * 1024 * 1024).optional(),
+}).superRefine((message, context) => {
+  const hasText = message.content.replace(/[\s\u200B-\u200D\uFEFF]/g, "").length > 0;
+  if (!hasText && !message.attachmentUrl) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["content"],
+      message: "Message cannot be empty",
+    });
+  }
+  if (message.attachmentUrl && (!message.attachmentName || !message.attachmentMimeType || !message.attachmentSize)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["attachmentUrl"],
+      message: "Attachment details are incomplete",
+    });
+  }
 });
+export type InsertDmMessage = z.infer<typeof insertDmMessageSchema>;
 
 export const toggleMessageReactionSchema = z.object({
   emoji: z
