@@ -184,6 +184,7 @@ export const dmMessages = pgTable(
     senderId: varchar("sender_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    replyToId: varchar("reply_to_id"),
     content: text("content").notNull(),
     attachmentUrl: varchar("attachment_url"),
     attachmentName: varchar("attachment_name"),
@@ -294,6 +295,7 @@ export const insertServerMessageSchema = createInsertSchema(serverMessages)
 
 export const insertDmMessageSchema = z.object({
   content: z.string().trim().max(2000).default(""),
+  replyToId: z.string().min(1).optional(),
   attachmentUrl: z.string().regex(/^\/uploads\/[a-z]+\/[^/]+$/, "Invalid attachment").optional(),
   attachmentName: z.string().trim().min(1).max(120).optional(),
   attachmentMimeType: z.string().trim().min(1).max(120).optional(),
@@ -508,6 +510,7 @@ export type DmConversationWithPeer = DmConversation & {
 };
 export type DmMessageWithSender = DmMessage & {
   sender: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "usernameColor">;
+  reply?: MessageReplyPreview;
   reactions?: MessageReactionSummary[];
 };
 export type BannedUser = typeof bannedUsers.$inferSelect;

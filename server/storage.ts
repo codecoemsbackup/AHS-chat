@@ -117,6 +117,7 @@ export interface IStorage {
     userId: string,
     canViewRealNames?: boolean,
   ): Promise<MessagePage<DmMessageWithSender>>;
+  getDmMessageInConversation(messageId: string, conversationId: string): Promise<DmMessage | undefined>;
   createDmMessage(
     conversationId: string,
     senderId: string,
@@ -333,6 +334,7 @@ export class DatabaseStorage implements IStorage {
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       conversation_id varchar NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
       sender_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reply_to_id varchar,
       content text NOT NULL,
       attachment_url varchar,
       attachment_name varchar,
@@ -340,6 +342,7 @@ export class DatabaseStorage implements IStorage {
       attachment_size integer,
       created_at timestamp DEFAULT now()
     )`);
+    await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS reply_to_id varchar`);
     await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_url varchar`);
     await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_name varchar`);
     await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_mime_type varchar`);
@@ -1062,8 +1065,8 @@ export class DatabaseStorage implements IStorage {
       userId,
     );
     return {
-      messages: pageRows.map(({ message, sender }) => ({
-        ...message,
+      messages: await Promise.all(pageRows.map(async ({ message, sender }) => ({
+        ...await this.withDmReplyPreview(message),
         sender: {
           id: sender.id,
           username: sender.username,
@@ -1072,9 +1075,40 @@ export class DatabaseStorage implements IStorage {
           usernameColor: sender.usernameColor,
         },
         reactions: reactionsByMessage.get(message.id) || [],
-      })),
+      }))),
       hasMore,
     };
+  }
+
+  async getDmMessageInConversation(
+    messageId: string,
+    conversationId: string,
+  ): Promise<DmMessage | undefined> {
+    const [message] = await db
+      .select()
+      .from(dmMessages)
+      .where(and(eq(dmMessages.id, messageId), eq(dmMessages.conversationId, conversationId)));
+    return message;
+  }
+
+  private async withDmReplyPreview(message: DmMessage): Promise<DmMessageWithSender> {
+    if (!message.replyToId) return message;
+    const [row] = await db
+      .select({ message: dmMessages, sender: users })
+      .from(dmMessages)
+      .innerJoin(users, eq(users.id, dmMessages.senderId))
+      .where(and(
+        eq(dmMessages.id, message.replyToId),
+        eq(dmMessages.conversationId, message.conversationId),
+      ));
+    if (!row) return message;
+    const reply: MessageReplyPreview = {
+      id: row.message.id,
+      content: row.message.content,
+      senderId: row.message.senderId,
+      senderName: row.sender.username || "Member",
+    };
+    return { ...message, reply };
   }
 
   async createDmMessage(
@@ -1095,7 +1129,7 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(eq(users.id, senderId));
     return {
-      ...message,
+      ...await this.withDmReplyPreview(message),
       sender: {
         id: sender.id,
         username: sender.username,
