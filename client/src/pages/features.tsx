@@ -1,57 +1,38 @@
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const featureGroups = [
+const releases = [
   {
-    title: "Community and channels",
+    date: "October 6, 2026",
+    title: "Direct-message media and public feature notes",
     features: [
-      "A shared community server with general, rules, announcements, polls, and staff channels.",
-      "Admins can create and manage channels; the staff channel is limited to admins.",
-      "Jump directly to a channel with its /server/<channel> URL.",
+      "Send file attachments and GIFs in accepted direct-message conversations.",
+      "Browse the feature and update history without signing in.",
+      "Open the feature notes from the landing, sign-in, sign-up, and chat screens.",
     ],
   },
   {
-    title: "Messaging",
+    date: "October 5, 2026",
+    title: "Shareable chat destinations",
     features: [
-      "Real-time channel messages with live typing indicators and online presence.",
-      "Reply to messages, mention members, and attach files or GIFs.",
-      "Create polls in the polls channel and react to messages with emoji.",
-      "Load message history as you scroll back; admins can remove messages.",
-      "See unread message and mention indicators for channels.",
+      "Open a channel directly with a /server/<channel> link.",
+      "Open a direct message with a /dms/<username> link.",
+      "The root chat route opens the default channel.",
     ],
   },
   {
-    title: "Direct messages",
+    date: "Earlier updates",
+    title: "Original feature set (exact release dates not recorded)",
     features: [
-      "Start private conversations with community members.",
-      "New conversations arrive as message requests that recipients can accept or decline.",
-      "Send files and GIFs in accepted direct-message conversations.",
-      "See unread DM counts and navigate directly to a conversation with /dms/<username>.",
-    ],
-  },
-  {
-    title: "Profiles and accounts",
-    features: [
-      "Sign in with a username and password and choose a unique username.",
-      "Complete required real-name and school-email setup when prompted.",
-      "Set a profile picture, custom status, online status, and Do Not Disturb.",
-      "Real names and email addresses are only visible to the account holder and owner-role accounts.",
-    ],
-  },
-  {
-    title: "Administration and safety",
-    features: [
-      "Admins can manage server channels, review members, and ban or unban accounts.",
-      "Admins can use the everyone mention and create polls.",
-      "Staff conversations and admin-only channels are restricted by account permissions.",
-    ],
-  },
-  {
-    title: "Appearance and navigation",
-    features: [
-      "Switch between light and dark themes.",
-      "Choose an app accent color and a separate username display color.",
-      "Use direct channel and DM URLs; the root route opens the default channel.",
+      "Community channels for general conversation, rules, announcements, polls, and staff.",
+      "Real-time channel messages, typing indicators, online presence, and unread indicators.",
+      "Message replies, member mentions, file attachments, GIFs, polls, and emoji reactions.",
+      "Scroll back to load message history; admins can manage channels and remove messages.",
+      "Private conversations with message requests, unread counts, and emoji reactions.",
+      "Username and password accounts, profile pictures, and custom usernames.",
+      "Required real-name and school-email setup; private profile details are visible only to their owner and owner-role accounts.",
+      "Custom status, online status, Do Not Disturb, light and dark themes, and personalized accent and username colors.",
+      "Admin tools for member management, bans, staff access, and everyone mentions.",
     ],
   },
 ];
@@ -59,40 +40,45 @@ const featureGroups = [
 export default function FeaturesPage() {
   return (
     <main className="app-shell min-h-screen px-4 py-8 sm:px-8">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-3xl">
         <Button asChild variant="ghost" className="mb-6">
           <a href="/">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to chat
+            Back to AHS Chat
           </a>
         </Button>
 
         <header className="mb-8">
-          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-primary">
-            AHS Chat
+          <p className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-primary">
+            <Sparkles className="h-4 w-4" />
+            AHS Chat updates
           </p>
-          <h1 className="text-3xl font-bold sm:text-4xl">Features</h1>
+          <h1 className="text-3xl font-bold sm:text-4xl">Features &amp; Patch Notes</h1>
           <p className="mt-3 max-w-2xl text-muted-foreground">
-            A guide to the community, messaging, profile, and administration
-            features available in AHS Chat.
+            What you can do in AHS Chat and what has been added over time.
+            New updates appear at the top.
           </p>
         </header>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {featureGroups.map((group) => (
-            <section
-              key={group.title}
-              className="glass-panel rounded-xl p-5"
-              aria-labelledby={`feature-group-${group.title}`}
+        <div className="space-y-5">
+          {releases.map((release) => (
+            <article
+              key={release.date}
+              className="glass-panel rounded-xl p-5 sm:p-6"
+              aria-labelledby={`release-${release.date.replaceAll(" ", "-")}`}
             >
-              <h2
-                id={`feature-group-${group.title}`}
-                className="mb-4 text-lg font-semibold"
-              >
-                {group.title}
-              </h2>
+              <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <time className="text-sm font-semibold text-primary">{release.date}</time>
+                <span className="text-muted-foreground" aria-hidden="true">·</span>
+                <h2
+                  id={`release-${release.date.replaceAll(" ", "-")}`}
+                  className="text-lg font-semibold"
+                >
+                  {release.title}
+                </h2>
+              </div>
               <ul className="space-y-3">
-                {group.features.map((feature) => (
+                {release.features.map((feature) => (
                   <li key={feature} className="flex gap-3 text-sm leading-relaxed">
                     <Check
                       className="mt-0.5 h-4 w-4 shrink-0 text-primary"
@@ -102,7 +88,7 @@ export default function FeaturesPage() {
                   </li>
                 ))}
               </ul>
-            </section>
+            </article>
           ))}
         </div>
       </div>

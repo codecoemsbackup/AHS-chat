@@ -14,6 +14,9 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Button asChild variant="outline" data-testid="button-features">
+              <a href="/features">Features</a>
+            </Button>
             <Button asChild data-testid="button-login">
               <a href="/login">Sign In</a>
             </Button>

@@ -18,6 +18,7 @@ import {
   Bell,
   BellOff,
   X,
+  ScrollText,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1483,6 +1484,14 @@ export default function ChatPage() {
             </div>
           </div>
 
+          <a
+            href="/features"
+            className="channel-nav-item mx-2 mt-4 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-sidebar-accent/65 hover:text-sidebar-accent-foreground"
+            data-testid="link-features"
+          >
+            <ScrollText className="h-4 w-4" aria-hidden="true" />
+            Features &amp; patch notes
+          </a>
           <div className="px-4 pb-2 pt-5">
             <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               <span>Text channels</span>
