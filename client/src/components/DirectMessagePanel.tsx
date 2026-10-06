@@ -22,6 +22,7 @@ interface DirectMessagePanelProps {
   currentUserId: string;
   onBack: () => void;
   onRespond: (accepted: boolean) => void;
+  onCancelRequest: () => void;
 }
 
 export default function DirectMessagePanel({
@@ -29,6 +30,7 @@ export default function DirectMessagePanel({
   currentUserId,
   onBack,
   onRespond,
+  onCancelRequest,
 }: DirectMessagePanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -328,6 +330,9 @@ export default function DirectMessagePanel({
             <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
               You can send messages once {peerName} accepts your request.
             </p>
+            <Button className="mt-6" variant="outline" onClick={onCancelRequest}>
+              Cancel request
+            </Button>
           </section>
         </div>
       )}

@@ -110,6 +110,7 @@ export interface IStorage {
   getDmConversation(conversationId: string, userId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer | undefined>;
   createDmConversation(requesterId: string, peerId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer>;
   respondToDmRequest(conversationId: string, userId: string, accepted: boolean): Promise<DmConversation | undefined>;
+  cancelDmRequest(conversationId: string, userId: string): Promise<DmConversation | undefined>;
   getDmMessages(
     conversationId: string,
     pagination: MessagePagination,
@@ -879,7 +880,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         sql`(${dmConversations.participantOneId} = ${userId}
           OR ${dmConversations.participantTwoId} = ${userId})
-          AND ${dmConversations.status} <> 'declined'`,
+          AND ${dmConversations.status} NOT IN ('declined', 'cancelled')`,
       )
       .orderBy(desc(dmConversations.updatedAt));
     return rows.map(({ conversation, peer }) => ({
@@ -955,7 +956,7 @@ export class DatabaseStorage implements IStorage {
       );
 
     let conversation = existing;
-    if (conversation?.status === "declined") {
+    if (conversation?.status === "declined" || conversation?.status === "cancelled") {
       [conversation] = await db
         .update(dmConversations)
         .set({ requesterId, status: "pending", updatedAt: new Date() })
@@ -999,6 +1000,26 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(dmConversations.id, conversationId),
           sql`${dmConversations.requesterId} <> ${userId}`,
+          eq(dmConversations.status, "pending"),
+          sql`(${dmConversations.participantOneId} = ${userId}
+            OR ${dmConversations.participantTwoId} = ${userId})`,
+        ),
+      )
+      .returning();
+    return conversation;
+  }
+
+  async cancelDmRequest(
+    conversationId: string,
+    userId: string,
+  ): Promise<DmConversation | undefined> {
+    const [conversation] = await db
+      .update(dmConversations)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(
+        and(
+          eq(dmConversations.id, conversationId),
+          eq(dmConversations.requesterId, userId),
           eq(dmConversations.status, "pending"),
           sql`(${dmConversations.participantOneId} = ${userId}
             OR ${dmConversations.participantTwoId} = ${userId})`,

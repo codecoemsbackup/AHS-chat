@@ -1187,6 +1187,25 @@ export default function ChatPage() {
     }
   };
 
+  const cancelDmRequest = async () => {
+    if (!selectedDm || selectedDm.status !== "pending" || selectedDm.isIncoming) return;
+    try {
+      await apiRequest(`/api/dms/${selectedDm.id}/request`, "DELETE");
+      queryClient.setQueryData<DmConversationWithPeer[]>(["/api/dms"], (current) =>
+        current?.filter((conversation) => conversation.id !== selectedDm.id) || [],
+      );
+      if (defaultChannel) setLocation(getChannelPath(defaultChannel));
+      await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+      toast({ title: "Request cancelled" });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't cancel request",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const saveCustomStatus = async (customStatus: string) => {
     setStatusSaving(true);
     try {
@@ -1602,6 +1621,7 @@ export default function ChatPage() {
                 if (defaultChannel) setLocation(getChannelPath(defaultChannel));
               }}
               onRespond={(accepted) => void respondToDmRequest(accepted)}
+              onCancelRequest={() => void cancelDmRequest()}
             />
           ) : activeChannel ? (
             <>

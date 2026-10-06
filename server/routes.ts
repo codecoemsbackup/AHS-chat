@@ -641,6 +641,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/dms/:conversationId/request", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const updated = await storage.cancelDmRequest(req.params.conversationId, actor.id);
+      if (!updated) {
+        return res.status(409).json({
+          message: "Only the sender can cancel a pending request",
+        });
+      }
+      for (const participantId of [updated.participantOneId, updated.participantTwoId]) {
+        ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
+          conversationId: updated.id,
+        });
+      }
+      res.json({ cancelled: true });
+    } catch (error: any) {
+      sendError(res, error, "Failed to cancel message request");
+    }
+  });
+
   app.get("/api/dms/:conversationId/messages", isAuthenticated, async (req: any, res: Response) => {
     try {
       const actor = await activeUser(req, res);
