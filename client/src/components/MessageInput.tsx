@@ -147,6 +147,11 @@ export default function MessageInput({
     setSelectedGif(null);
     setMentionUserIds(new Set());
     if (fileInputRef.current) fileInputRef.current.value = "";
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      textarea?.focus();
+      textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -365,7 +370,9 @@ export default function MessageInput({
           data-testid="input-message"
         />
         <Button
+          type="button"
           onClick={() => void handleSend()}
+          onMouseDown={(event) => event.preventDefault()}
           size="icon"
           disabled={(!message.trim() && !selectedFile && !selectedGif) || isUploading}
           data-testid="button-send"
