@@ -18,7 +18,7 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",
 });
 
-// Session storage table - Required for Replit Auth
+// Session storage table used by express-session.
 export const sessions = pgTable(
   "sessions",
   {
@@ -29,7 +29,7 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table - Required for Replit Auth with chat extensions
+// User storage table.
 export const users = pgTable(
   "users",
   {

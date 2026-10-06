@@ -9,7 +9,7 @@ import {
   createLocalSessionUser,
   hashPassword,
   verifyPassword,
-} from "./replitAuth";
+} from "./auth";
 import {
   insertServerMessageSchema,
   insertDmMessageSchema,

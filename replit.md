@@ -44,7 +44,7 @@ Preferred communication style: Simple, everyday language.
 
 **API Design:**
 - RESTful endpoints for channels, server members, messages, bans, and permissions
-- Session-based authentication integrated with Replit Auth (OpenID Connect)
+- Session-based authentication with local username and password accounts
 - Real-time events handled separately through Socket.io (message delivery, typing indicators, status updates)
 
 **Data Access Layer:**
@@ -53,7 +53,7 @@ Preferred communication style: Simple, everyday language.
 - Database operations wrapped in service methods for business logic encapsulation
 
 **Authentication Flow:**
-- Replit Auth (OpenID Connect) for user authentication
+- Local username and password authentication
 - Session management using express-session with PostgreSQL store (connect-pg-simple)
 - Session persistence across server restarts via database-backed session store
 - Protected routes using isAuthenticated middleware
@@ -106,7 +106,6 @@ Preferred communication style: Simple, everyday language.
 ### External Dependencies
 
 **Third-Party Services:**
-- Replit Auth (OIDC provider): User authentication and identity management
 - Google Fonts CDN: Typography (Inter, DM Sans, Fira Code, Geist Mono, Architects Daughter)
 
 **Key NPM Packages:**
@@ -126,7 +125,7 @@ Preferred communication style: Simple, everyday language.
 - socket.io: WebSocket server
 - drizzle-orm: Type-safe ORM
 - @neondatabase/serverless: PostgreSQL driver for Neon
-- openid-client + passport: Authentication
+- passport: Authentication
 - express-session + connect-pg-simple: Session management
 - drizzle-zod: Schema to Zod validator conversion
 
