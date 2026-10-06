@@ -1562,7 +1562,11 @@ export default function ChatPage() {
                   }`}
                   >
                       <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-                        <MessageSquare className="h-4 w-4" />
+                        <UserAvatar
+                          name={peerName}
+                          avatarUrl={conversation.peer.profileImageUrl || undefined}
+                          size="sm"
+                        />
                         {(dmUnreadCounts[conversation.id] || 0) > 0 && (
                           <span
                             className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
