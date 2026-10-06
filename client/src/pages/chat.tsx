@@ -817,13 +817,13 @@ export default function ChatPage() {
 
   useEffect(() => {
     const audio = new Audio("/dm-notification.mp3");
-    audio.volume = 0.25;
+    audio.volume = user?.username?.toLowerCase() === "sock" ? 1 : 0.25;
     dmNotificationAudioRef.current = audio;
     return () => {
       audio.pause();
       dmNotificationAudioRef.current = null;
     };
-  }, []);
+  }, [user?.username]);
 
   const deleteMessageMutation = useMutation({
     mutationFn: (messageId: string) => apiRequest(`/api/messages/${messageId}`, "DELETE"),
