@@ -18,6 +18,7 @@ import {
   Bell,
   BellOff,
   X,
+  UserPlus,
   ScrollText,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -1386,6 +1387,17 @@ export default function ChatPage() {
               Real names and email addresses are visible only to owner-role accounts.
             </p>
           )}
+          {selectedMember &&
+            selectedMember.id !== user.id &&
+            !selectedMember.isBanned && (
+              <Button
+                className="w-full"
+                onClick={() => void openDirectMessage(selectedMember)}
+              >
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add friend
+              </Button>
+            )}
         </DialogContent>
       </Dialog>
 
