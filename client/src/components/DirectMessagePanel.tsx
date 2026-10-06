@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, MessageSquare, X } from "lucide-react";
+import { ArrowLeft, Check, Menu, MessageSquare, X } from "lucide-react";
 import type {
   DmConversationWithPeer,
   DmMessageWithSender,
@@ -21,6 +21,7 @@ const MESSAGE_PAGE_SIZE = 30;
 interface DirectMessagePanelProps {
   conversation: DmConversationWithPeer;
   currentUserId: string;
+  onOpenNavigation: () => void;
   onBack: () => void;
   onRespond: (accepted: boolean) => void;
   onCancelRequest: () => void;
@@ -29,6 +30,7 @@ interface DirectMessagePanelProps {
 export default function DirectMessagePanel({
   conversation,
   currentUserId,
+  onOpenNavigation,
   onBack,
   onRespond,
   onCancelRequest,
@@ -217,7 +219,16 @@ export default function DirectMessagePanel({
 
   return (
     <>
-      <header className="chat-main-header glass-panel flex h-[4.5rem] shrink-0 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6">
+      <header className="chat-main-header glass-panel flex h-[4.5rem] shrink-0 items-center gap-2 border-x-0 border-t-0 px-3 sm:gap-3 sm:px-6">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 lg:hidden"
+          onClick={onOpenNavigation}
+          aria-label="Open chats and channels"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to channels">
           <ArrowLeft className="h-4 w-4" />
         </Button>

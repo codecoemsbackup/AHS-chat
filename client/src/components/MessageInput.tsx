@@ -227,7 +227,7 @@ export default function MessageInput({
   };
 
   return (
-    <div className="chat-composer glass-panel relative border-x-0 border-b-0 px-4 py-3.5 sm:px-6">
+    <div className="chat-composer glass-panel relative border-x-0 border-b-0 px-2.5 py-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-3.5">
       {replyTo && (
         <div className="glass-control mb-3 flex items-center gap-2 rounded-xl border-l-2 border-primary px-3 py-2">
           <Reply className="h-4 w-4 shrink-0 text-primary" />
@@ -283,7 +283,7 @@ export default function MessageInput({
           </button>
         </div>
       )}
-      <div className="flex items-end gap-3">
+      <div className="flex min-w-0 items-end gap-1.5 sm:gap-3">
         <input
           ref={fileInputRef}
           type="file"
@@ -364,7 +364,7 @@ export default function MessageInput({
           onPaste={handlePaste}
           onKeyDown={handleKeyDown}
           placeholder={isUploading ? "Uploading file..." : placeholder}
-           className="glass-control min-h-10 max-h-32 resize-none"
+          className="glass-control min-h-10 min-w-0 max-h-32 flex-1 resize-none px-2.5 sm:px-3"
           rows={1}
           disabled={isUploading}
           data-testid="input-message"

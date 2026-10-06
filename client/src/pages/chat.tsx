@@ -19,6 +19,7 @@ import {
   BellOff,
   X,
   UserPlus,
+  Menu,
   ScrollText,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -181,6 +182,8 @@ export default function ChatPage() {
   const [avatarCropOpen, setAvatarCropOpen] = useState(false);
   const [avatarCropSource, setAvatarCropSource] = useState<string | null>(null);
   const [membersOpen, setMembersOpen] = useState(true);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [mobileMembersOpen, setMobileMembersOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageReplyPreview | null>(null);
   const [channelUnread, setChannelUnread] = useState<Record<string, ChannelUnread>>({});
   const [dmUnreadCounts, setDmUnreadCounts] = useState<Record<string, number>>({});
@@ -1103,7 +1106,10 @@ export default function ChatPage() {
     <button
       key={channel.id}
       type="button"
-      onClick={() => setLocation(getChannelPath(channel))}
+      onClick={() => {
+        setLocation(getChannelPath(channel));
+        setMobileNavigationOpen(false);
+      }}
       data-active={activeChannelId === channel.id}
       className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
         activeChannelId === channel.id
@@ -1402,8 +1408,23 @@ export default function ChatPage() {
       </Dialog>
 
       <div className="app-shell flex h-dvh min-h-0 overflow-hidden">
-        <aside className="chat-sidebar glass-panel flex min-h-0 w-[280px] shrink-0 flex-col border-y-0 border-l-0 border-r border-sidebar-border">
-          <div className="flex items-center gap-3 border-b border-sidebar-border p-4">
+        {(mobileNavigationOpen || mobileMembersOpen) && (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            aria-label="Close navigation"
+            onClick={() => {
+              setMobileNavigationOpen(false);
+              setMobileMembersOpen(false);
+            }}
+          />
+        )}
+        <aside
+          className={`chat-sidebar glass-panel fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(280px,88vw)] shrink-0 flex-col border-y-0 border-l-0 border-r border-sidebar-border transition-transform duration-200 lg:static lg:z-auto lg:w-[280px] lg:translate-x-0 ${
+            mobileNavigationOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          }`}
+        >
+          <div className="flex items-center gap-2 border-b border-sidebar-border p-3 sm:gap-3 sm:p-4">
             <BrandLogo className="h-10 w-10 shrink-0 object-contain" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-bold tracking-tight">AHS Chat</p>
@@ -1565,7 +1586,10 @@ export default function ChatPage() {
                   <button
                     key={conversation.id}
                     type="button"
-                    onClick={() => setLocation(getDmPath(conversation))}
+                    onClick={() => {
+                      setLocation(getDmPath(conversation));
+                      setMobileNavigationOpen(false);
+                    }}
                   data-active={selectedDmId === conversation.id}
                   className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
                     selectedDmId === conversation.id
@@ -1633,6 +1657,7 @@ export default function ChatPage() {
             <DirectMessagePanel
               conversation={selectedDm}
               currentUserId={user.id}
+              onOpenNavigation={() => setMobileNavigationOpen(true)}
               onBack={() => {
                 if (defaultChannel) setLocation(getChannelPath(defaultChannel));
               }}
@@ -1641,7 +1666,16 @@ export default function ChatPage() {
             />
           ) : activeChannel ? (
             <>
-              <header className="chat-main-header glass-panel flex h-[4.5rem] shrink-0 items-center gap-3 border-x-0 border-t-0 px-5 sm:px-8">
+              <header className="chat-main-header glass-panel flex h-[4.5rem] shrink-0 items-center gap-2 border-x-0 border-t-0 px-3 sm:gap-3 sm:px-8">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 lg:hidden"
+                  onClick={() => setMobileNavigationOpen(true)}
+                  aria-label="Open chats and channels"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
                 <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
                   {isRulesChannel(activeChannel.name) ? (
                     <ClipboardCheck
@@ -1685,10 +1719,16 @@ export default function ChatPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hidden lg:inline-flex"
-                  onClick={() => setMembersOpen((open) => !open)}
-                  aria-label={membersOpen ? "Hide member list" : "Show member list"}
-                  title={membersOpen ? "Hide member list" : "Show member list"}
+                  className="shrink-0"
+                  onClick={() => {
+                    if (window.matchMedia("(max-width: 1023px)").matches) {
+                      setMobileMembersOpen(true);
+                    } else {
+                      setMembersOpen((open) => !open);
+                    }
+                  }}
+                  aria-label="Show member list"
+                  title="Show member list"
                 >
                   <Users className="h-4 w-4" />
                 </Button>
@@ -1696,7 +1736,7 @@ export default function ChatPage() {
 
               <ScrollArea
                 ref={channelScrollAreaRef}
-                className="chat-content min-h-0 flex-1 px-4 py-6 sm:px-8"
+                className="chat-content min-h-0 flex-1 px-3 py-4 sm:px-8 sm:py-6"
                 onScrollCapture={(event) => {
                   void loadOlderChannelMessages(event.target as HTMLElement);
                 }}
@@ -1883,8 +1923,12 @@ export default function ChatPage() {
 
         <aside
           className={`glass-panel ${
-            membersOpen ? "hidden lg:flex" : "hidden"
-          } min-h-0 w-64 shrink-0 border-y-0 border-r-0 border-l border-border/60 bg-card/55 p-4 lg:flex-col`}
+            mobileMembersOpen
+              ? "fixed inset-y-0 right-0 z-50 flex w-[min(20rem,88vw)]"
+              : membersOpen
+                ? "hidden lg:flex"
+                : "hidden"
+          } min-h-0 shrink-0 border-y-0 border-r-0 border-l border-border/60 bg-card/95 p-4 lg:static lg:w-64 lg:flex-col lg:bg-card/55`}
         >
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -1896,7 +1940,10 @@ export default function ChatPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => setMembersOpen(false)}
+              onClick={() => {
+                setMembersOpen(false);
+                setMobileMembersOpen(false);
+              }}
               aria-label="Hide member list"
               title="Hide member list"
             >
@@ -1920,7 +1967,10 @@ export default function ChatPage() {
                   <button
                     type="button"
                     className="flex min-w-0 flex-1 items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => setSelectedMember(member)}
+                    onClick={() => {
+                      setSelectedMember(member);
+                      setMobileMembersOpen(false);
+                    }}
                     aria-label={`View ${member.username || "member"} profile`}
                   >
                     <UserAvatar
