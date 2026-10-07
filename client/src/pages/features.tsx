@@ -3,6 +3,15 @@ import { Button } from "@/components/ui/button";
 
 const releases = [
   {
+    date: "October 7, 2026",
+    title: "Mobile-friendly chat layout",
+    features: [
+      "Use a slide-out navigation drawer and member list overlay on smaller screens.",
+      "Navigate between channels and direct messages with mobile header controls.",
+      "Use a compact message composer with spacing for device safe areas.",
+    ],
+  },
+  {
     date: "October 6, 2026",
     title: "Direct-message media and public feature notes",
     features: [
