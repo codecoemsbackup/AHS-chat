@@ -1,30 +1,31 @@
-import { Hono } from "hono";
 import { ChatRoom } from "./chat-room";
-
+ 
 // durable object classes must be exported from the worker entry
 export { ChatRoom };
-
-type Env = {
-  Bindings: {
-    CHAT_ROOM: DurableObjectNamespace;
-  };
+ 
+interface Env {
+  CHAT_ROOM: DurableObjectNamespace;
+}
+ 
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+ 
+    if (url.pathname === "/api/health") {
+      return Response.json({ ok: true });
+    }
+ 
+    // websocket endpoint: /api/ws?room=main
+    if (url.pathname === "/api/ws") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("expected websocket", { status: 426 });
+      }
+      const room = url.searchParams.get("room") ?? "main";
+      const stub = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(room));
+      return stub.fetch(request);
+    }
+ 
+    return new Response("not found", { status: 404 });
+  },
 };
-
-const app = new Hono<Env>();
-
-app.get("/api/health", (c) => c.json({ ok: true }));
-
-// websocket endpoint: /api/ws?room=main
-app.get("/api/ws", (c) => {
-  if (c.req.header("Upgrade") !== "websocket") {
-    return c.text("expected websocket", 426);
-  }
-  const room = c.req.query("room") ?? "main";
-  const stub = c.env.CHAT_ROOM.get(c.env.CHAT_ROOM.idFromName(room));
-  return stub.fetch(c.req.raw);
-});
-
-// port your other express routes here, e.g.
-// app.get("/api/whatever", (c) => c.json({ ... }));
-
-export default app;
+ 
