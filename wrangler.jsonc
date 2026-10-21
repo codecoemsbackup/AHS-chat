@@ -5,7 +5,8 @@
   "assets": {
     "directory": "./dist/public",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
+    "d1_databases": [{ "binding": "DB", "database_name": "ahschat-db", "database_id": "b3881d9c-a24d-4ccb-93df-a8a6e27379b2" }]
   },
   "durable_objects": {
     "bindings": [{ "name": "CHAT_ROOM", "class_name": "ChatRoom" }]
