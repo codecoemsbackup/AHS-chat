@@ -466,6 +466,7 @@ export type MessageReplyPreview = {
   senderName: string;
 };
 export type ServerMessageWithRelations = ServerMessage & {
+  isArchived?: boolean;
   reply?: MessageReplyPreview;
   pollResults?: PollResults;
   reactions?: MessageReactionSummary[];

@@ -58,6 +58,13 @@ app.use((req, res, next) => {
   await storage.ensureMessageReactionsSchema();
   await storage.ensureMessagePaginationIndexes();
   await storage.ensureServer();
+  if (process.env.MESSAGE_ARCHIVE_DIR) {
+    await storage.archiveOverflowingChannelMessages();
+  } else {
+    console.warn(
+      "MESSAGE_ARCHIVE_DIR is not configured; channel archiving will stop new posts once a channel reaches 500 database messages.",
+    );
+  }
 
   const server = await registerRoutes(app);
 

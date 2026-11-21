@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { uploads } from "@shared/schema";
 import { db } from "./db";
+import {
+  readArchivedUpload,
+  removeArchivedUpload,
+} from "./channelMessageArchive";
 
 export const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
 export const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
@@ -88,7 +92,7 @@ export async function saveUpload(
 
 export async function getUpload(key: string) {
   const [upload] = await db.select().from(uploads).where(eq(uploads.key, key)).limit(1);
-  return upload;
+  return upload || readArchivedUpload(key);
 }
 
 export async function removeUpload(url: string | null | undefined) {
@@ -96,4 +100,5 @@ export async function removeUpload(url: string | null | undefined) {
   const key = url.slice("/uploads/".length);
   if (!/^(avatars|files)\/[\w-]+\.[a-z0-9]+$/i.test(key)) return;
   await db.delete(uploads).where(eq(uploads.key, key));
+  await removeArchivedUpload(key);
 }

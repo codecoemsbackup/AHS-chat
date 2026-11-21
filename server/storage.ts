@@ -9,6 +9,7 @@ import {
   dmMessages,
   dmMessageReactions,
   bannedUsers,
+  uploads,
   type User,
   type UpsertUser,
   type Server,
@@ -29,11 +30,40 @@ import {
   type DmMessageWithSender,
   type MessageReactionSummary,
 } from "@shared/schema";
+import type * as schema from "@shared/schema";
 import { db } from "./db";
-import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ExtractTablesWithRelations,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
+import type { NodePgTransaction } from "drizzle-orm/node-postgres";
+import {
+  isMessageArchiveConfigured,
+  prepareMessageArchive,
+  readArchivedChannelMessage,
+  readArchivedChannelMessages,
+  writeArchivedUpload,
+  removeChannelMessageArchive,
+  writeArchivedChannelMessage,
+  type ArchivedChannelMessage,
+} from "./channelMessageArchive";
 
 export const MAIN_SERVER_ID = "main";
 export const DEFAULT_CHANNEL_NAME = "general";
+const MAX_DATABASE_MESSAGES_PER_CHANNEL = 500;
+
+type DatabaseTransaction = NodePgTransaction<
+  typeof schema,
+  ExtractTablesWithRelations<typeof schema>
+>;
 
 export type ServerMember = User & { isBanned: boolean; banReason: string | null };
 
@@ -53,6 +83,99 @@ function summarizeReactions(
     grouped.set(row.emoji, summary);
   }
   return Array.from(grouped, ([emoji, summary]) => ({ emoji, ...summary }));
+}
+
+async function archiveOldestChannelMessage(
+  transaction: DatabaseTransaction,
+  channelId: string,
+) {
+  const [message] = await transaction
+    .select()
+    .from(serverMessages)
+    .where(eq(serverMessages.channelId, channelId))
+    .orderBy(asc(serverMessages.createdAt), asc(serverMessages.id))
+    .limit(1)
+    .for("update");
+  if (!message) return false;
+
+  const [reactions, votes] = await Promise.all([
+    transaction
+      .select({
+        emoji: messageReactions.emoji,
+        userId: messageReactions.userId,
+        username: users.username,
+        firstName: users.firstName,
+      })
+      .from(messageReactions)
+      .innerJoin(users, eq(users.id, messageReactions.userId))
+      .where(eq(messageReactions.messageId, message.id)),
+    transaction
+      .select({
+        userId: pollVotes.userId,
+        optionIndex: pollVotes.optionIndex,
+        username: users.username,
+        firstName: users.firstName,
+      })
+      .from(pollVotes)
+      .innerJoin(users, eq(users.id, pollVotes.userId))
+      .where(eq(pollVotes.messageId, message.id)),
+  ]);
+  const archive: ArchivedChannelMessage = {
+    message,
+    reactions: reactions.map((reaction) => ({
+      emoji: reaction.emoji,
+      userId: reaction.userId,
+      name: reaction.username || reaction.firstName || "Member",
+    })),
+    votes,
+  };
+  await writeArchivedChannelMessage(archive);
+  const uploadKey = message.attachmentUrl?.replace(/^\/uploads\//, "");
+  if (uploadKey?.startsWith("files/")) {
+    const [upload] = await transaction
+      .select()
+      .from(uploads)
+      .where(eq(uploads.key, uploadKey));
+    if (upload) {
+      await writeArchivedUpload({
+        key: upload.key,
+        mimeType: upload.mimeType,
+        originalName: upload.originalName,
+        size: upload.size,
+        data: upload.data,
+      });
+      await transaction.delete(uploads).where(eq(uploads.key, uploadKey));
+    }
+  }
+  await transaction.delete(serverMessages).where(eq(serverMessages.id, message.id));
+  return true;
+}
+
+async function ensureChannelMessageCapacity(
+  transaction: DatabaseTransaction,
+  channelId: string,
+  reserveForNewMessage = true,
+) {
+  const [result] = await transaction
+    .select({ count: sql<number>`count(*)::int` })
+    .from(serverMessages)
+    .where(eq(serverMessages.channelId, channelId));
+  const maxExistingMessages =
+    MAX_DATABASE_MESSAGES_PER_CHANNEL - (reserveForNewMessage ? 1 : 0);
+  let count = result.count;
+  if (count <= maxExistingMessages) return;
+  if (!isMessageArchiveConfigured()) {
+    throw new Error(
+      "Channel message archiving is not configured. Set MESSAGE_ARCHIVE_DIR to a Render Persistent Disk path.",
+    );
+  }
+  while (count > maxExistingMessages) {
+    const archived = await archiveOldestChannelMessage(transaction, channelId);
+    if (!archived) {
+      throw new Error("Could not archive enough channel messages to enforce the database limit.");
+    }
+    count -= 1;
+  }
 }
 
 export interface IStorage {
@@ -77,6 +200,7 @@ export interface IStorage {
   createChannel(name: string, description?: string): Promise<Channel>;
   updateChannel(channelId: string, name: string, description?: string): Promise<Channel>;
   deleteChannel(channelId: string): Promise<void>;
+  archiveOverflowingChannelMessages(): Promise<void>;
 
   getMembers(): Promise<ServerMember[]>;
   updateAdmin(userId: string, isAdmin: boolean): Promise<User>;
@@ -458,7 +582,11 @@ export class DatabaseStorage implements IStorage {
       .from(serverMessages)
       .innerJoin(channels, eq(channels.id, serverMessages.channelId))
       .where(eq(serverMessages.id, messageId));
-    return channel?.channel;
+    if (channel) return channel.channel;
+    for (const candidate of await this.getChannels()) {
+      if (await readArchivedChannelMessage(candidate.id, messageId)) return candidate;
+    }
+    return undefined;
   }
 
   async createChannel(name: string, description?: string): Promise<Channel> {
@@ -509,6 +637,7 @@ export class DatabaseStorage implements IStorage {
       throw new Error("The staff channel cannot be deleted");
     }
     await db.delete(channels).where(eq(channels.id, channelId));
+    await removeChannelMessageArchive(channelId);
   }
 
   async getMembers(): Promise<ServerMember[]> {
@@ -590,12 +719,40 @@ export class DatabaseStorage implements IStorage {
         )!,
       );
     }
-    const messages = await db
+    const databaseMessages = await db
       .select()
       .from(serverMessages)
       .where(and(...conditions))
       .orderBy(desc(serverMessages.createdAt), desc(serverMessages.id))
       .limit(pagination.limit + 1);
+    let messages: Array<ServerMessage & { isArchived?: boolean }> = databaseMessages;
+    let archiveRecords: ArchivedChannelMessage[] = [];
+    if (databaseMessages.length <= pagination.limit) {
+      const oldestDatabaseMessage = databaseMessages[databaseMessages.length - 1];
+      const beforeCreatedAt = oldestDatabaseMessage?.createdAt
+        ? new Date(oldestDatabaseMessage.createdAt)
+        : pagination.beforeCreatedAt
+          ? new Date(pagination.beforeCreatedAt)
+          : undefined;
+      const beforeId = oldestDatabaseMessage?.id || pagination.beforeId;
+      archiveRecords = await readArchivedChannelMessages(
+        channelId,
+        beforeCreatedAt,
+        beforeId,
+        pagination.limit + 1,
+      );
+      const seenMessageIds = new Set(databaseMessages.map((message) => message.id));
+      messages = [
+        ...databaseMessages,
+        ...archiveRecords
+          .map(({ message }) => ({ ...message, isArchived: true }))
+          .filter((message) => !seenMessageIds.has(message.id)),
+      ].sort((a, b) => {
+        const timeDifference =
+          (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0);
+        return timeDifference || b.id.localeCompare(a.id);
+      });
+    }
     const hasMore = messages.length > pagination.limit;
     const visibleMessages = messages
       .slice(0, pagination.limit)
@@ -606,7 +763,7 @@ export class DatabaseStorage implements IStorage {
       )
       .reverse();
     const pollMessageIds = visibleMessages
-      .filter((message) => message.pollData)
+      .filter((message) => message.pollData && !message.isArchived)
       .map((message) => message.id);
     const votes = pollMessageIds.length
       ? await db
@@ -627,10 +784,31 @@ export class DatabaseStorage implements IStorage {
       current.push(vote);
       votesByMessage.set(vote.messageId, current);
     }
+    const archiveRecordByMessageId = new Map(
+      archiveRecords.map((record) => [record.message.id, record]),
+    );
+    for (const message of visibleMessages) {
+      if (!message.isArchived) continue;
+      const archivedRecord = archiveRecordByMessageId.get(message.id);
+      if (!archivedRecord) continue;
+      votesByMessage.set(
+        message.id,
+        archivedRecord.votes.map((vote) => ({ ...vote, messageId: message.id })),
+      );
+    }
     const reactionsByMessage = await this.getMessageReactions(
-      visibleMessages.map((message) => message.id),
+      visibleMessages.filter((message) => !message.isArchived).map((message) => message.id),
       userId,
     );
+    for (const message of visibleMessages) {
+      if (!message.isArchived) continue;
+      const archivedRecord = archiveRecordByMessageId.get(message.id);
+      if (!archivedRecord) continue;
+      reactionsByMessage.set(
+        message.id,
+        summarizeReactions(archivedRecord.reactions, userId),
+      );
+    }
     const formattedMessages = await Promise.all(
       visibleMessages.map(async (message) => {
         const withReply = await this.withReplyPreview(message);
@@ -655,21 +833,48 @@ export class DatabaseStorage implements IStorage {
     return { messages: formattedMessages, hasMore };
   }
 
+  async archiveOverflowingChannelMessages(): Promise<void> {
+    if (!isMessageArchiveConfigured()) return;
+    await prepareMessageArchive();
+    const channelList = await this.getChannels();
+    for (const channel of channelList) {
+      await db.transaction(async (transaction) => {
+        const [lockedChannel] = await transaction
+          .select({ id: channels.id })
+          .from(channels)
+          .where(eq(channels.id, channel.id))
+          .for("update");
+        if (!lockedChannel) return;
+        await ensureChannelMessageCapacity(transaction, channel.id, false);
+      });
+    }
+  }
+
   async createPoll(
     channelId: string,
     senderId: string,
     pollData: PollDefinition,
     includeVoters = false,
   ): Promise<ServerMessageWithRelations> {
-    const [message] = await db
-      .insert(serverMessages)
-      .values({
-        channelId,
-        senderId,
-        content: pollData.question,
-        pollData,
-      })
-      .returning();
+    const message = await db.transaction(async (transaction) => {
+      const [lockedChannel] = await transaction
+        .select({ id: channels.id })
+        .from(channels)
+        .where(eq(channels.id, channelId))
+        .for("update");
+      if (!lockedChannel) throw new Error("Channel not found");
+      await ensureChannelMessageCapacity(transaction, channelId);
+      const [createdMessage] = await transaction
+        .insert(serverMessages)
+        .values({
+          channelId,
+          senderId,
+          content: pollData.question,
+          pollData,
+        })
+        .returning();
+      return createdMessage;
+    });
     return this.getPollMessage(message, senderId, includeVoters);
   }
 
@@ -769,7 +974,20 @@ export class DatabaseStorage implements IStorage {
   async createMessage(
     message: InsertServerMessage & { senderId: string },
   ): Promise<ServerMessageWithRelations> {
-    const [newMessage] = await db.insert(serverMessages).values(message).returning();
+    const newMessage = await db.transaction(async (transaction) => {
+      const [lockedChannel] = await transaction
+        .select({ id: channels.id })
+        .from(channels)
+        .where(eq(channels.id, message.channelId))
+        .for("update");
+      if (!lockedChannel) throw new Error("Channel not found");
+      await ensureChannelMessageCapacity(transaction, message.channelId);
+      const [createdMessage] = await transaction
+        .insert(serverMessages)
+        .values(message)
+        .returning();
+      return createdMessage;
+    });
     return this.withReplyPreview(newMessage);
   }
 
@@ -783,7 +1001,24 @@ export class DatabaseStorage implements IStorage {
       .from(serverMessages)
       .innerJoin(users, eq(users.id, serverMessages.senderId))
       .where(eq(serverMessages.id, message.replyToId));
-    if (!row) return message;
+    if (!row) {
+      const archived = await readArchivedChannelMessage(
+        message.channelId,
+        message.replyToId,
+      );
+      if (!archived) return message;
+      const [sender] = await db
+        .select({ username: users.username })
+        .from(users)
+        .where(eq(users.id, archived.message.senderId));
+      const reply: MessageReplyPreview = {
+        id: archived.message.id,
+        content: archived.message.content,
+        senderId: archived.message.senderId,
+        senderName: sender?.username || "Member",
+      };
+      return { ...message, reply };
+    }
     const reply: MessageReplyPreview = {
       id: row.message.id,
       content: row.message.content,
@@ -794,10 +1029,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteMessage(messageId: string, deletedBy: string): Promise<void> {
-    await db
+    const [updatedMessage] = await db
       .update(serverMessages)
       .set({ deletedAt: new Date(), deletedBy })
-      .where(eq(serverMessages.id, messageId));
+      .where(eq(serverMessages.id, messageId))
+      .returning({ id: serverMessages.id });
+    if (updatedMessage) return;
+    for (const channel of await this.getChannels()) {
+      const archived = await readArchivedChannelMessage(channel.id, messageId);
+      if (!archived) continue;
+      archived.message.deletedAt = new Date();
+      archived.message.deletedBy = deletedBy;
+      await writeArchivedChannelMessage(archived);
+      return;
+    }
+    throw new Error("Message not found");
   }
 
   async getMessageReactions(

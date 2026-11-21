@@ -85,6 +85,7 @@ interface ChatBubbleProps {
   isMentionedUser?: boolean;
   reactions?: MessageReactionSummary[];
   onToggleReaction?: (emoji: string) => Promise<void>;
+  reactionsDisabled?: boolean;
 }
 
 export default function ChatBubble({
@@ -104,6 +105,7 @@ export default function ChatBubble({
   isMentionedUser = false,
   reactions = [],
   onToggleReaction,
+  reactionsDisabled = false,
 }: ChatBubbleProps) {
   const escapedMentionNames = mentionNames
     .filter(Boolean)
@@ -256,7 +258,11 @@ export default function ChatBubble({
           )}
         </div>
         {onToggleReaction && (
-          <MessageReactions reactions={reactions} onToggle={onToggleReaction} />
+          <MessageReactions
+            reactions={reactions}
+            onToggle={onToggleReaction}
+            disabled={reactionsDisabled}
+          />
         )}
         <span
           className={`pointer-events-none absolute -bottom-5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${

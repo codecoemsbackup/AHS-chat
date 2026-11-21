@@ -22,6 +22,7 @@ interface PollCardProps {
   onVote: (optionIndexes: number[]) => Promise<ServerMessageWithRelations | undefined>;
   reactions?: MessageReactionSummary[];
   onToggleReaction?: (emoji: string) => Promise<void>;
+  isArchived?: boolean;
 }
 
 export default function PollCard({
@@ -37,6 +38,7 @@ export default function PollCard({
   onVote,
   reactions = [],
   onToggleReaction,
+  isArchived = false,
 }: PollCardProps) {
   const [selectedOptions, setSelectedOptions] = useState<number[]>(results.userOptionIndexes);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,6 +47,7 @@ export default function PollCard({
   const hasVoted = results.userOptionIndexes.length > 0;
 
   const toggleOption = (index: number) => {
+    if (isArchived) return;
     setSelectedOptions((current) => {
       if (poll.allowMultiple) {
         return current.includes(index)
@@ -56,7 +59,7 @@ export default function PollCard({
   };
 
   const submitVote = async () => {
-    if (!selectedOptions.length || isSaving) return;
+    if (!selectedOptions.length || isSaving || isArchived) return;
     setIsSaving(true);
     try {
       const updated = await onVote(selectedOptions);
@@ -122,7 +125,7 @@ export default function PollCard({
               key={`${option}-${index}`}
               type="button"
               onClick={() => toggleOption(index)}
-              disabled={isSaving}
+              disabled={isSaving || isArchived}
               aria-pressed={selected}
               className={`relative flex min-h-11 w-full items-center justify-between overflow-hidden rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
                 selected ? "border-primary bg-primary/10" : "glass-control hover:border-primary/50"
@@ -154,7 +157,11 @@ export default function PollCard({
         })}
       </div>
       {onToggleReaction && (
-        <MessageReactions reactions={reactions} onToggle={onToggleReaction} />
+        <MessageReactions
+          reactions={reactions}
+          onToggle={onToggleReaction}
+          disabled={isArchived}
+        />
       )}
       {canViewVoters && votersExpanded && (
         <div className="mt-4 space-y-3 border-t pt-3">
@@ -194,9 +201,9 @@ export default function PollCard({
           type="button"
           size="sm"
           onClick={() => void submitVote()}
-          disabled={selectedOptions.length === 0 || isSaving}
+          disabled={selectedOptions.length === 0 || isSaving || isArchived}
         >
-          {isSaving ? "Submitting..." : hasVoted ? "Change vote" : "Vote"}
+          {isArchived ? "Archived" : isSaving ? "Submitting..." : hasVoted ? "Change vote" : "Vote"}
         </Button>
       </div>
     </div>

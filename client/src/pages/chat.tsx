@@ -1868,6 +1868,7 @@ export default function ChatPage() {
                             }
                             canDelete={user.isAdmin}
                             canViewVoters={user.isAdmin}
+                            isArchived={message.isArchived}
                             onDelete={() => deleteMessageMutation.mutate(message.id)}
                             onReply={() =>
                               setReplyingTo({
@@ -1920,6 +1921,7 @@ export default function ChatPage() {
                           canDelete={user.isAdmin}
                           onDelete={() => deleteMessageMutation.mutate(message.id)}
                           reactions={message.reactions}
+                          reactionsDisabled={message.isArchived}
                           onToggleReaction={(emoji) =>
                             toggleMessageReaction(message.channelId, message.id, emoji)
                           }
