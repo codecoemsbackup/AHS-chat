@@ -291,9 +291,13 @@ export default function ChatPage() {
     queryKey: activeChannelId
       ? [`/api/channels/${activeChannelId}/audit-logs`]
       : ["/api/channels/none/audit-logs"],
-    enabled: !!user?.isAdmin && !!activeChannel && isAuditLogChannel(activeChannel.name),
+    enabled:
+      !!user?.isAdmin &&
+      !!activeChannel &&
+      (isStaffChannel(activeChannel.name) || isAuditLogChannel(activeChannel.name)),
   });
   const staffAuditLogs = staffAuditQuery.data || [];
+  const staffAuditPreview = staffAuditLogs.slice(0, 5);
 
   useEffect(() => {
     if (location === "/" || location === "") {
@@ -1844,12 +1848,14 @@ export default function ChatPage() {
                   {loadingOlderChannel && (
                     <p className="mb-4 text-center text-xs text-muted-foreground">Loading older messages...</p>
                   )}
-                  {auditLogActive && (
+                  {(staffChatActive || auditLogActive) && (
                     <section className="mb-6 rounded-xl border border-border bg-muted/25 p-4">
                       <div className="mb-3 flex items-center gap-2">
                         <ScrollText className="h-4 w-4 text-primary" aria-hidden="true" />
                         <h2 className="text-sm font-semibold">Staff audit log</h2>
-                        <span className="text-xs text-muted-foreground">Recent message actions</span>
+                        <span className="text-xs text-muted-foreground">
+                          {auditLogActive ? "Recent message actions" : "Newest 5 message actions"}
+                        </span>
                       </div>
                       {staffAuditQuery.isError ? (
                         <div className="flex items-center justify-between gap-3 text-sm text-destructive">
@@ -1865,11 +1871,11 @@ export default function ChatPage() {
                         </div>
                       ) : staffAuditQuery.isLoading ? (
                         <p className="text-sm text-muted-foreground">Loading audit logs...</p>
-                      ) : staffAuditLogs.length === 0 ? (
+                      ) : (auditLogActive ? staffAuditLogs : staffAuditPreview).length === 0 ? (
                         <p className="text-sm text-muted-foreground">No message actions have been logged yet.</p>
                       ) : (
                         <ul className="max-h-56 space-y-2 overflow-y-auto pr-2">
-                          {staffAuditLogs.map((entry) => (
+                          {(auditLogActive ? staffAuditLogs : staffAuditPreview).map((entry) => (
                             <li key={entry.id} className="border-t border-border/70 pt-2 first:border-0 first:pt-0">
                               <p className="text-sm">
                                 <span className="font-medium">{entry.actorName}</span>{" "}

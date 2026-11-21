@@ -997,7 +997,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const actor = await adminUser(req, res);
         if (!actor) return;
         const channel = await storage.getChannel(req.params.channelId);
-        if (!channel || channel.serverId !== "main" || !isAuditLogChannel(channel.name)) {
+        if (
+          !channel ||
+          channel.serverId !== "main" ||
+          (!isStaffChannel(channel.name) && !isAuditLogChannel(channel.name))
+        ) {
           return res.status(404).json({ message: "Channel not found" });
         }
         res.json(await getStaffAuditLogs());
