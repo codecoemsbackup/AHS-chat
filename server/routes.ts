@@ -51,6 +51,14 @@ function isStaffChannel(channelName: string) {
   return channelName.trim().toLowerCase() === "staff";
 }
 
+function isAuditLogChannel(channelName: string) {
+  return channelName.trim().toLowerCase() === "audit-log";
+}
+
+function isPrivateStaffChannel(channelName: string) {
+  return isStaffChannel(channelName) || isAuditLogChannel(channelName);
+}
+
 function publicUser(user: any, viewer?: { id: string; isOwner: boolean }) {
   const { passwordHash: _passwordHash, email, ...safeUser } = user;
   const canViewRealName = viewer?.isOwner || viewer?.id === user.id;
@@ -563,7 +571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         server,
         channels: actor.isAdmin
           ? channels
-          : channels.filter((channel) => !isStaffChannel(channel.name)),
+          : channels.filter((channel) => !isPrivateStaffChannel(channel.name)),
         members: members.map((member) => publicUser(member, actor)),
       });
     } catch (error) {
@@ -779,8 +787,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!(await adminUser(req, res))) return;
       const parsed = updateChannelSchema.parse(req.body);
-      if (isStaffChannel(parsed.name)) {
-        return res.status(400).json({ message: "The staff channel name is reserved" });
+      if (isStaffChannel(parsed.name) || isAuditLogChannel(parsed.name)) {
+        return res.status(400).json({ message: "This staff channel name is reserved" });
       }
       const channel = await storage.createChannel(parsed.name, parsed.description);
       ioFor(app)?.to(SERVER_ROOM).emit("channel:created", channel);
@@ -798,8 +806,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!channel || channel.serverId !== "main") {
         return res.status(404).json({ message: "Channel not found" });
       }
-      if (isStaffChannel(channel.name) || isStaffChannel(parsed.name)) {
-        return res.status(400).json({ message: "The staff channel cannot be renamed" });
+      if (
+        isPrivateStaffChannel(channel.name) ||
+        isStaffChannel(parsed.name) ||
+        isAuditLogChannel(parsed.name)
+      ) {
+        return res.status(400).json({ message: "This staff channel cannot be renamed" });
       }
       if (
         channel.name.toLowerCase() === "general" &&
@@ -826,8 +838,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!channel || channel.serverId !== "main") {
         return res.status(404).json({ message: "Channel not found" });
       }
-      if (isStaffChannel(channel.name)) {
-        return res.status(400).json({ message: "The staff channel cannot be deleted" });
+      if (isPrivateStaffChannel(channel.name)) {
+        return res.status(400).json({ message: "This staff channel cannot be deleted" });
       }
       await storage.deleteChannel(channel.id);
       ioFor(app)?.to(SERVER_ROOM).emit("channel:deleted", { channelId: channel.id });
@@ -985,7 +997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const actor = await adminUser(req, res);
         if (!actor) return;
         const channel = await storage.getChannel(req.params.channelId);
-        if (!channel || channel.serverId !== "main" || !isStaffChannel(channel.name)) {
+        if (!channel || channel.serverId !== "main" || !isAuditLogChannel(channel.name)) {
           return res.status(404).json({ message: "Channel not found" });
         }
         res.json(await getStaffAuditLogs());
@@ -1007,7 +1019,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (
           !channel ||
           channel.serverId !== "main" ||
-          (isStaffChannel(channel.name) && !actor.isAdmin)
+          (isPrivateStaffChannel(channel.name) && !actor.isAdmin)
         ) {
           return res.status(404).json({ message: "Channel not found" });
         }
@@ -1102,7 +1114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (
           !channel ||
           channel.serverId !== "main" ||
-          (isStaffChannel(channel.name) && !actor.isAdmin)
+          (isPrivateStaffChannel(channel.name) && !actor.isAdmin)
         ) {
           return res.status(404).json({ message: "Message not found" });
         }
@@ -1216,7 +1228,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const channel = await storage.getChannel(parsed.channelId);
         if (!channel || channel.serverId !== "main") return;
         const sender = await storage.getUser(userId);
-        const adminOnlyChannel = ["rules", "announcements", "polls", "staff"].includes(
+        if (isAuditLogChannel(channel.name)) {
+          socket.emit("message:error", { error: "The audit log channel is read-only" });
+          return;
+        }
+        const adminOnlyChannel = ["rules", "announcements", "polls", "staff", "audit-log"].includes(
           channel.name.trim().toLowerCase(),
         );
         if (!sender || (adminOnlyChannel && !sender.isAdmin)) {
@@ -1249,7 +1265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mentionUserIds: validMentionUserIds,
           senderId: userId,
         });
-        io.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:receive", message);
+        io.to(isPrivateStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:receive", message);
       } catch (error) {
         console.error("Error sending message:", error);
         socket.emit("message:error", { error: "Failed to send message" });
@@ -1260,8 +1276,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = socket.data.userId;
       if (!userId) return;
       const channel = await storage.getChannel(channelId);
-      if (!channel || (isStaffChannel(channel.name) && !socket.rooms.has(STAFF_ROOM))) return;
-      const room = isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM;
+      if (!channel || (isPrivateStaffChannel(channel.name) && !socket.rooms.has(STAFF_ROOM))) return;
+      if (isAuditLogChannel(channel.name)) return;
+      const room = isPrivateStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM;
       socket.to(room).emit("member:typing", { userId, channelId, typing: true });
     });
 
@@ -1269,8 +1286,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = socket.data.userId;
       if (!userId) return;
       const channel = await storage.getChannel(channelId);
-      if (!channel || (isStaffChannel(channel.name) && !socket.rooms.has(STAFF_ROOM))) return;
-      const room = isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM;
+      if (!channel || (isPrivateStaffChannel(channel.name) && !socket.rooms.has(STAFF_ROOM))) return;
+      if (isAuditLogChannel(channel.name)) return;
+      const room = isPrivateStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM;
       socket.to(room).emit("member:typing", { userId, channelId, typing: false });
     });
 

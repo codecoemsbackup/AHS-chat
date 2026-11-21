@@ -439,6 +439,25 @@ export class DatabaseStorage implements IStorage {
         position: (lastChannel?.position ?? 0) + 1,
       });
     }
+    const [auditLog] = await db
+      .select({ id: channels.id })
+      .from(channels)
+      .where(sql`${channels.serverId} = ${MAIN_SERVER_ID} AND lower(btrim(${channels.name})) = 'audit-log'`)
+      .limit(1);
+    if (!auditLog) {
+      const [lastChannel] = await db
+        .select({ position: channels.position })
+        .from(channels)
+        .where(eq(channels.serverId, MAIN_SERVER_ID))
+        .orderBy(desc(channels.position))
+        .limit(1);
+      await db.insert(channels).values({
+        serverId: MAIN_SERVER_ID,
+        name: "audit-log",
+        description: "Private read-only log of staff message actions.",
+        position: (lastChannel?.position ?? 0) + 1,
+      });
+    }
     await this.claimOwnerIfNeeded();
     const [server] = await db.select().from(servers).where(eq(servers.id, MAIN_SERVER_ID));
     return server;
@@ -591,8 +610,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createChannel(name: string, description?: string): Promise<Channel> {
-    if (name.trim().toLowerCase() === "staff") {
+    const reservedName = name.trim().toLowerCase();
+    if (reservedName === "staff") {
       throw new Error("The staff channel is reserved");
+    }
+    if (reservedName === "audit-log") {
+      throw new Error("The audit log channel is reserved");
     }
     const existing = await db
       .select({ position: channels.position })
@@ -613,12 +636,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateChannel(channelId: string, name: string, description?: string): Promise<Channel> {
-    if (name.trim().toLowerCase() === "staff") {
+    const reservedName = name.trim().toLowerCase();
+    if (reservedName === "staff") {
       throw new Error("The staff channel name is reserved");
     }
+    if (reservedName === "audit-log") {
+      throw new Error("The audit log channel name is reserved");
+    }
     const existingChannel = await this.getChannel(channelId);
-    if (existingChannel?.name.trim().toLowerCase() === "staff") {
+    const existingName = existingChannel?.name.trim().toLowerCase();
+    if (existingName === "staff") {
       throw new Error("The staff channel cannot be renamed");
+    }
+    if (existingName === "audit-log") {
+      throw new Error("The audit log channel cannot be renamed");
     }
     const [channel] = await db
       .update(channels)
@@ -636,6 +667,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (channel.name.trim().toLowerCase() === "staff") {
       throw new Error("The staff channel cannot be deleted");
+    }
+    if (channel.name.trim().toLowerCase() === "audit-log") {
+      throw new Error("The audit log channel cannot be deleted");
     }
     await db.delete(channels).where(eq(channels.id, channelId));
     await removeChannelMessageArchive(channelId);

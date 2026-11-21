@@ -83,7 +83,7 @@ interface ServerData {
   members: ServerMember[];
 }
 
-const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls", "staff"]);
+const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls", "staff", "audit-log"]);
 const MESSAGE_PAGE_SIZE = 30;
 
 function ConnectionQualityIcon({
@@ -143,6 +143,10 @@ function isPollsChannel(channelName: string) {
 
 function isStaffChannel(channelName: string) {
   return channelName.trim().toLowerCase() === "staff";
+}
+
+function isAuditLogChannel(channelName: string) {
+  return channelName.trim().toLowerCase() === "audit-log";
 }
 
 function getChannelPath(channel: Channel) {
@@ -247,6 +251,7 @@ export default function ChatPage() {
       ["polls", 2],
       ["general", 3],
       ["staff", 4],
+      ["audit-log", 5],
     ]);
     return [...channels].sort((a, b) => {
       const aOrder = displayOrder.get(a.name.trim().toLowerCase()) ?? 5;
@@ -254,8 +259,12 @@ export default function ChatPage() {
       return aOrder - bOrder || a.position - b.position;
     });
   }, [channels]);
-  const regularChannels = orderedChannels.filter((channel) => !isStaffChannel(channel.name));
-  const staffChannels = orderedChannels.filter((channel) => isStaffChannel(channel.name));
+  const regularChannels = orderedChannels.filter(
+    (channel) => !isStaffChannel(channel.name) && !isAuditLogChannel(channel.name),
+  );
+  const staffChannels = orderedChannels.filter(
+    (channel) => isStaffChannel(channel.name) || isAuditLogChannel(channel.name),
+  );
   const defaultChannel =
     channels.find((channel) => channel.name.trim().toLowerCase() === "general") || channels[0];
   const activeChannelId = selectedChannelId || defaultChannel?.id || null;
@@ -264,7 +273,9 @@ export default function ChatPage() {
   const adminOnlyChannel = !!activeChannel && isAdminOnlyChannel(activeChannel.name);
   const pollsChannel =
     !!activeChannel && activeChannel.name.trim().toLowerCase() === "polls";
-  const canSendMessages = !!user && (!adminOnlyChannel || user.isAdmin);
+  const auditLogActive = !!activeChannel && isAuditLogChannel(activeChannel.name);
+  const canSendMessages =
+    !!user && !auditLogActive && (!adminOnlyChannel || user.isAdmin);
 
   const { data: messagePage, isLoading: messagesLoading } = useQuery<
     MessagePage<ServerMessageWithRelations>
@@ -272,7 +283,7 @@ export default function ChatPage() {
     queryKey: activeChannelId
       ? [`/api/channels/${activeChannelId}/messages`]
       : ["/api/channels/none/messages"],
-    enabled: !!activeChannelId && !selectedDmId,
+    enabled: !!activeChannelId && !selectedDmId && !auditLogActive,
     staleTime: 0,
   });
   const messages = messagePage?.messages || [];
@@ -280,7 +291,7 @@ export default function ChatPage() {
     queryKey: activeChannelId
       ? [`/api/channels/${activeChannelId}/audit-logs`]
       : ["/api/channels/none/audit-logs"],
-    enabled: !!user?.isAdmin && !!activeChannel && isStaffChannel(activeChannel.name),
+    enabled: !!user?.isAdmin && !!activeChannel && isAuditLogChannel(activeChannel.name),
   });
   const staffAuditLogs = staffAuditQuery.data || [];
 
@@ -1138,7 +1149,10 @@ export default function ChatPage() {
     }, 2000);
   };
 
-  const staffChatActive = !selectedDmId && !!activeChannel && isStaffChannel(activeChannel.name);
+  const staffChatActive =
+    !selectedDmId &&
+    !!activeChannel &&
+    (isStaffChannel(activeChannel.name) || isAuditLogChannel(activeChannel.name));
   const visibleMembers = useMemo(
     () =>
       members.filter(
@@ -1199,6 +1213,8 @@ export default function ChatPage() {
           <Vote className="h-4 w-4" aria-hidden="true" />
         ) : isStaffChannel(channel.name) ? (
           <UsersRound className="h-4 w-4" aria-hidden="true" />
+        ) : isAuditLogChannel(channel.name) ? (
+          <ScrollText className="h-4 w-4" aria-hidden="true" />
         ) : (
           <Hash className="h-4 w-4" />
         )}
@@ -1769,6 +1785,8 @@ export default function ChatPage() {
                     <Vote className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   ) : isStaffChannel(activeChannel.name) ? (
                     <UsersRound className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                  ) : isAuditLogChannel(activeChannel.name) ? (
+                    <ScrollText className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   ) : (
                     <Hash className="h-5 w-5 text-muted-foreground" />
                   )}
@@ -1826,7 +1844,7 @@ export default function ChatPage() {
                   {loadingOlderChannel && (
                     <p className="mb-4 text-center text-xs text-muted-foreground">Loading older messages...</p>
                   )}
-                  {staffChatActive && (
+                  {auditLogActive && (
                     <section className="mb-6 rounded-xl border border-border bg-muted/25 p-4">
                       <div className="mb-3 flex items-center gap-2">
                         <ScrollText className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -1871,7 +1889,7 @@ export default function ChatPage() {
                       )}
                     </section>
                   )}
-                  {messagesLoading ? (
+                  {auditLogActive ? null : messagesLoading ? (
                     <div className="space-y-4">
                       <div className="h-12 w-2/3 animate-pulse rounded-lg bg-muted" />
                       <div className="ml-auto h-12 w-1/2 animate-pulse rounded-lg bg-muted" />
@@ -2035,7 +2053,9 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <div className="border-t border-border bg-muted/30 px-4 py-4 text-center text-sm text-muted-foreground">
-                  Only admins can post in #{activeChannel.name}.
+                  {auditLogActive
+                    ? "This audit log channel is read-only."
+                    : `Only admins can post in #${activeChannel.name}.`}
                 </div>
               )}
             </>
