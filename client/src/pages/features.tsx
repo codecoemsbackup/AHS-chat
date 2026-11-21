@@ -4,6 +4,15 @@ import { Button } from "@/components/ui/button";
 const releases = [
   {
     date: "November 21, 2026",
+    title: "Persistent channel navigation and separate staff audit log",
+    features: [
+      "Refreshing on a channel keeps that channel open and preserves the /server/<channel> address.",
+      "Staff audit activity is stored in a dedicated, admin-only, read-only #audit-log channel.",
+      "The #staff channel shows a compact preview of the 5 newest audit entries.",
+    ],
+  },
+  {
+    date: "November 21, 2026",
     title: "Chat navigation, reactions, and message archiving",
     features: [
       "Press / outside a text field to focus the message composer.",

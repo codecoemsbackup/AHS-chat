@@ -244,6 +244,15 @@ export default function ChatPage() {
   const members = serverData?.members || [];
   const currentMember = user ? members.find((member) => member.id === user.id) : undefined;
   const currentStatus = currentMember?.status || user?.status || "offline";
+  const channelRouteMatch = location.match(/^\/server\/([^/]+)\/?$/);
+  const channelRouteName = channelRouteMatch
+    ? decodePathSegment(channelRouteMatch[1]).trim().toLowerCase()
+    : null;
+  const routedChannel = channelRouteName
+    ? channels.find(
+        (channel) => channel.name.trim().toLowerCase() === channelRouteName,
+      )
+    : undefined;
   const orderedChannels = useMemo(() => {
     const displayOrder = new Map([
       ["rules", 0],
@@ -267,7 +276,11 @@ export default function ChatPage() {
   );
   const defaultChannel =
     channels.find((channel) => channel.name.trim().toLowerCase() === "general") || channels[0];
-  const activeChannelId = selectedChannelId || defaultChannel?.id || null;
+  const activeChannelId =
+    routedChannel?.id ||
+    (!selectedDmId ? selectedChannelId : null) ||
+    defaultChannel?.id ||
+    null;
   const viewedChannelId = selectedDmId ? null : activeChannelId;
   const activeChannel = channels.find((channel) => channel.id === activeChannelId);
   const adminOnlyChannel = !!activeChannel && isAdminOnlyChannel(activeChannel.name);
@@ -351,12 +364,6 @@ export default function ChatPage() {
     location,
     setLocation,
   ]);
-
-  useEffect(() => {
-    if (channels.length && (!selectedChannelId || !channels.some((channel) => channel.id === selectedChannelId))) {
-       setSelectedChannelId(defaultChannel?.id || null);
-    }
-  }, [channels, defaultChannel?.id, selectedChannelId]);
 
   useEffect(() => {
     selectedChannelRef.current = viewedChannelId;
@@ -649,16 +656,22 @@ export default function ChatPage() {
       });
       if (payload.id === user.id || payload.userId === user.id) {
         if (payload.isAdmin === false) {
-          const staffChannel = queryClient
+          const staffChannels = queryClient
             .getQueryData<ServerData>(["/api/server"])
-            ?.channels.find((channel) => isStaffChannel(channel.name));
-          if (staffChannel) {
-            void queryClient.removeQueries({
-              queryKey: [`/api/channels/${staffChannel.id}/messages`],
-              exact: true,
-            });
-            if (selectedChannelRef.current === staffChannel.id) {
+            ?.channels.filter((channel) => isStaffChannel(channel.name) || isAuditLogChannel(channel.name));
+          if (staffChannels) {
+            for (const staffChannel of staffChannels) {
+              void queryClient.removeQueries({
+                queryKey: [`/api/channels/${staffChannel.id}/messages`],
+                exact: true,
+              });
+            }
+            if (
+              staffChannels.some((channel) => selectedChannelRef.current === channel.id) &&
+              defaultChannel
+            ) {
               setSelectedChannelId(null);
+              setLocation(getChannelPath(defaultChannel));
             }
           }
         }
