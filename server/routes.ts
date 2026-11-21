@@ -759,6 +759,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         count,
         userId: actor.id,
         added: result.added,
+        reactionDetails: result.reactions.map(({ emoji, count, users = [] }) => ({
+          emoji,
+          count,
+          users,
+        })),
       };
       for (const participantId of [conversation.participantOneId, conversation.participantTwoId]) {
         ioFor(app)?.to(`user:${participantId}`).emit("dm:reaction", payload);
@@ -1083,6 +1088,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           count,
           userId: actor.id,
           added: result.added,
+          reactionDetails: result.reactions.map(({ emoji, count, users = [] }) => ({
+            emoji,
+            count,
+            users,
+          })),
         });
         res.json(result);
       } catch (error: any) {

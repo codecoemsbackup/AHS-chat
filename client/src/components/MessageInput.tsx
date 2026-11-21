@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,6 +97,26 @@ export default function MessageInput({
   const [cursorPosition, setCursorPosition] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const focusComposer = (event: KeyboardEvent) => {
+      if (
+        event.key !== "/" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.target instanceof HTMLElement &&
+          (event.target.isContentEditable ||
+            /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      textareaRef.current?.focus();
+    };
+    window.addEventListener("keydown", focusComposer);
+    return () => window.removeEventListener("keydown", focusComposer);
+  }, []);
 
   const activeMention = useMemo(() => {
     const beforeCursor = message.slice(0, cursorPosition);
@@ -367,6 +387,8 @@ export default function MessageInput({
           className="glass-control min-h-10 min-w-0 max-h-32 flex-1 resize-none px-2.5 sm:px-3"
           rows={1}
           disabled={isUploading}
+          aria-keyshortcuts="/"
+          title="Press / to jump to the message box"
           data-testid="input-message"
         />
         <Button

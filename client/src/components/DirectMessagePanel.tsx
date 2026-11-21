@@ -141,6 +141,57 @@ export default function DirectMessagePanel({
     }
   };
 
+  const jumpToMessage = async (messageId: string) => {
+    const queryKey = [messagesUrl];
+    let page = queryClient.getQueryData<MessagePage<DmMessageWithSender>>(queryKey);
+    try {
+      while (page?.hasMore && !page.messages.some((message) => message.id === messageId)) {
+        const oldestMessage = page.messages[0];
+        if (!oldestMessage?.createdAt) break;
+        const params = new URLSearchParams({
+          limit: String(MESSAGE_PAGE_SIZE),
+          beforeCreatedAt: new Date(oldestMessage.createdAt).toISOString(),
+          beforeId: oldestMessage.id,
+        });
+        const olderPage: MessagePage<DmMessageWithSender> = await apiRequest(
+          `${messagesUrl}?${params}`,
+          "GET",
+        );
+        const existingIds = new Set(page.messages.map((message) => message.id));
+        page = {
+          hasMore: olderPage.hasMore,
+          messages: [
+            ...olderPage.messages.filter((message) => !existingIds.has(message.id)),
+            ...page.messages,
+          ],
+        };
+        queryClient.setQueryData(queryKey, page);
+        if (!olderPage.messages.length) break;
+      }
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const target = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-message-id]"),
+      ).find((element) => element.dataset.messageId === messageId);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        toast({
+          title: "Original message unavailable",
+          description: "This message may have been deleted.",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Couldn't open original message",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const sendMessage = async (
     draft: string,
     file?: File,
@@ -270,45 +321,47 @@ export default function DirectMessagePanel({
                 </div>
               ) : messages.length ? (
                 messages.map((message) => (
-                  <ChatBubble
-                    key={message.id}
-                    message={message.content}
-                    timestamp={message.createdAt
-                      ? new Date(message.createdAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
+                  <div key={message.id} data-message-id={message.id}>
+                    <ChatBubble
+                      message={message.content}
+                      timestamp={message.createdAt
+                        ? new Date(message.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "Now"}
+                      isSent={message.senderId === currentUserId}
+                      senderName={message.sender.username || message.sender.firstName || "Member"}
+                      senderColor={message.sender.usernameColor}
+                      avatarUrl={message.sender.profileImageUrl}
+                      reply={message.reply}
+                      onJumpToReply={jumpToMessage}
+                      onReply={() =>
+                        setReplyingTo({
+                          id: message.id,
+                          content: message.content,
+                          senderId: message.senderId,
+                          senderName:
+                            message.sender.username || message.sender.firstName || "Member",
                         })
-                      : "Now"}
-                    isSent={message.senderId === currentUserId}
-                    senderName={message.sender.username || message.sender.firstName || "Member"}
-                    senderColor={message.sender.usernameColor}
-                    avatarUrl={message.sender.profileImageUrl}
-                    reply={message.reply}
-                    onReply={() =>
-                      setReplyingTo({
-                        id: message.id,
-                        content: message.content,
-                        senderId: message.senderId,
-                        senderName:
-                          message.sender.username || message.sender.firstName || "Member",
-                      })
-                    }
-                    attachment={
-                      message.attachmentUrl &&
-                      message.attachmentName &&
-                      message.attachmentMimeType &&
-                      message.attachmentSize
-                        ? {
-                            url: message.attachmentUrl,
-                            name: message.attachmentName,
-                            mimeType: message.attachmentMimeType,
-                            size: message.attachmentSize,
-                          }
-                        : undefined
-                    }
-                    reactions={message.reactions}
-                    onToggleReaction={(emoji) => toggleReaction(message.id, emoji)}
-                  />
+                      }
+                      attachment={
+                        message.attachmentUrl &&
+                        message.attachmentName &&
+                        message.attachmentMimeType &&
+                        message.attachmentSize
+                          ? {
+                              url: message.attachmentUrl,
+                              name: message.attachmentName,
+                              mimeType: message.attachmentMimeType,
+                              size: message.attachmentSize,
+                            }
+                          : undefined
+                      }
+                      reactions={message.reactions}
+                      onToggleReaction={(emoji) => toggleReaction(message.id, emoji)}
+                    />
+                  </div>
                 ))
               ) : (
                 <div className="flex min-h-[45vh] flex-col items-center justify-center text-center">

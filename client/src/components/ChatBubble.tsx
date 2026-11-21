@@ -80,6 +80,7 @@ interface ChatBubbleProps {
   onDelete?: () => void;
   reply?: MessageReplyPreview;
   onReply?: () => void;
+  onJumpToReply?: (messageId: string) => void;
   mentionNames?: string[];
   isMentionedUser?: boolean;
   reactions?: MessageReactionSummary[];
@@ -98,6 +99,7 @@ export default function ChatBubble({
   onDelete,
   reply,
   onReply,
+  onJumpToReply,
   mentionNames = [],
   isMentionedUser = false,
   reactions = [],
@@ -134,10 +136,15 @@ export default function ChatBubble({
           </span>
         )}
         {reply && (
-          <div className="mb-1 max-w-full border-l-2 border-primary/60 px-2 text-left text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="mb-1 max-w-full border-l-2 border-primary/60 px-2 text-left text-xs text-muted-foreground hover:bg-muted/60"
+            onClick={() => onJumpToReply?.(reply.id)}
+            aria-label={`Jump to message from ${reply.senderName}`}
+          >
             <span className="font-semibold text-primary">Replying to {reply.senderName}</span>
-            <p className="truncate">{reply.content || "Attachment"}</p>
-          </div>
+            <span className="block truncate">{reply.content || "Attachment"}</span>
+          </button>
         )}
         {isMentionedUser && (
           <span className="mb-1 inline-flex items-center gap-1 rounded-md border border-amber-400 bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-950 shadow-sm dark:bg-amber-300 dark:text-amber-950">

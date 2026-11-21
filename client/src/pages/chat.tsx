@@ -820,6 +820,58 @@ export default function ChatPage() {
     }
   };
 
+  const jumpToChannelMessage = async (messageId: string) => {
+    if (!activeChannelId) return;
+    const queryKey = [`/api/channels/${activeChannelId}/messages`];
+    let page = queryClient.getQueryData<MessagePage<ServerMessageWithRelations>>(queryKey);
+    try {
+      while (page?.hasMore && !page.messages.some((message) => message.id === messageId)) {
+        const oldestMessage = page.messages[0];
+        if (!oldestMessage?.createdAt) break;
+        const params = new URLSearchParams({
+          limit: String(MESSAGE_PAGE_SIZE),
+          beforeCreatedAt: new Date(oldestMessage.createdAt).toISOString(),
+          beforeId: oldestMessage.id,
+        });
+        const olderPage: MessagePage<ServerMessageWithRelations> = await apiRequest(
+          `/api/channels/${activeChannelId}/messages?${params}`,
+          "GET",
+        );
+        const existingIds = new Set(page.messages.map((message) => message.id));
+        page = {
+          hasMore: olderPage.hasMore,
+          messages: [
+            ...olderPage.messages.filter((message) => !existingIds.has(message.id)),
+            ...page.messages,
+          ],
+        };
+        queryClient.setQueryData(queryKey, page);
+        if (!olderPage.messages.length) break;
+      }
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const target = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-message-id]"),
+      ).find((element) => element.dataset.messageId === messageId);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        toast({
+          title: "Original message unavailable",
+          description: "This message may have been deleted.",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Couldn't open original message",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     const audio = new Audio("/dm-notification.mp3");
     audio.volume = user?.username?.toLowerCase() === "sock" ? 1 : 0.25;
@@ -1785,7 +1837,7 @@ export default function ChatPage() {
                             }
                           : undefined;
                       return (
-                        <div key={message.id}>
+                        <div key={message.id} data-message-id={message.id}>
                           {isNewDay && messageDate && (
                             <div className="mb-4 mt-7 flex items-center gap-3 text-xs font-medium text-muted-foreground">
                               <span className="h-px flex-1 bg-border" />
@@ -1854,6 +1906,7 @@ export default function ChatPage() {
                             })
                             .filter(Boolean)}
                           reply={message.reply}
+                          onJumpToReply={jumpToChannelMessage}
                           onReply={() =>
                             setReplyingTo(
                               message.reply || {

@@ -38,14 +38,18 @@ export const DEFAULT_CHANNEL_NAME = "general";
 export type ServerMember = User & { isBanned: boolean; banReason: string | null };
 
 function summarizeReactions(
-  rows: Array<{ emoji: string; userId: string }>,
+  rows: Array<{ emoji: string; userId: string; name: string }>,
   userId: string,
 ): MessageReactionSummary[] {
-  const grouped = new Map<string, { count: number; reactedByMe: boolean }>();
+  const grouped = new Map<
+    string,
+    { count: number; reactedByMe: boolean; users: Array<{ userId: string; name: string }> }
+  >();
   for (const row of rows) {
-    const summary = grouped.get(row.emoji) || { count: 0, reactedByMe: false };
+    const summary = grouped.get(row.emoji) || { count: 0, reactedByMe: false, users: [] };
     summary.count += 1;
     if (row.userId === userId) summary.reactedByMe = true;
+    summary.users.push({ userId: row.userId, name: row.name });
     grouped.set(row.emoji, summary);
   }
   return Array.from(grouped, ([emoji, summary]) => ({ emoji, ...summary }));
@@ -806,13 +810,20 @@ export class DatabaseStorage implements IStorage {
         messageId: messageReactions.messageId,
         emoji: messageReactions.emoji,
         userId: messageReactions.userId,
+        username: users.username,
+        firstName: users.firstName,
       })
       .from(messageReactions)
+      .innerJoin(users, eq(users.id, messageReactions.userId))
       .where(inArray(messageReactions.messageId, messageIds));
-    const grouped = new Map<string, Array<{ emoji: string; userId: string }>>();
+    const grouped = new Map<string, Array<{ emoji: string; userId: string; name: string }>>();
     for (const row of rows) {
       const current = grouped.get(row.messageId) || [];
-      current.push(row);
+      current.push({
+        emoji: row.emoji,
+        userId: row.userId,
+        name: row.username || row.firstName || "Member",
+      });
       grouped.set(row.messageId, current);
     }
     return new Map(
@@ -1153,13 +1164,19 @@ export class DatabaseStorage implements IStorage {
         messageId: dmMessageReactions.messageId,
         emoji: dmMessageReactions.emoji,
         userId: dmMessageReactions.userId,
+        username: users.username,
       })
       .from(dmMessageReactions)
+      .innerJoin(users, eq(users.id, dmMessageReactions.userId))
       .where(inArray(dmMessageReactions.messageId, messageIds));
-    const grouped = new Map<string, Array<{ emoji: string; userId: string }>>();
+    const grouped = new Map<string, Array<{ emoji: string; userId: string; name: string }>>();
     for (const row of rows) {
       const current = grouped.get(row.messageId) || [];
-      current.push(row);
+      current.push({
+        emoji: row.emoji,
+        userId: row.userId,
+        name: row.username || "Member",
+      });
       grouped.set(row.messageId, current);
     }
     return new Map(

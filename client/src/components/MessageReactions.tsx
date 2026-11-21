@@ -49,24 +49,43 @@ export default function MessageReactions({
   return (
     <div className={`mt-1 flex max-w-full flex-wrap items-center gap-1.5 ${className || ""}`}>
       {reactions.map((reaction) => (
-        <Button
+        <div
           key={reaction.emoji}
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void toggle(reaction.emoji)}
-          disabled={disabled || pending !== null || (!reaction.reactedByMe && !canAddReaction)}
-          aria-pressed={reaction.reactedByMe}
-          aria-label={`${reaction.emoji} ${reaction.count} ${reaction.count === 1 ? "reaction" : "reactions"}`}
-          className={`h-7 min-w-10 gap-1 rounded-full px-2 ${
+          className={`inline-flex h-7 items-center rounded-full border ${
             reaction.reactedByMe
-              ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-              : ""
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-input bg-background"
           }`}
         >
-          <span>{reaction.emoji}</span>
-          <span className="text-xs tabular-nums">{reaction.count}</span>
-        </Button>
+          <button
+            type="button"
+            onClick={() => void toggle(reaction.emoji)}
+            disabled={disabled || pending !== null || (!reaction.reactedByMe && !canAddReaction)}
+            aria-pressed={reaction.reactedByMe}
+            aria-label={`Toggle ${reaction.emoji} reaction`}
+            className="h-full rounded-l-full px-2 text-sm hover:bg-muted/50 disabled:opacity-50"
+          >
+            {reaction.emoji}
+          </button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label={`See who reacted with ${reaction.emoji}`}
+                title="See who reacted"
+                className="h-full rounded-r-full px-1.5 text-xs tabular-nums hover:bg-muted/50"
+              >
+                {reaction.count}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto max-w-64 p-3" side="top" align="start">
+              <p className="mb-1 text-xs font-semibold">{reaction.emoji} Reacted by</p>
+              <p className="text-sm text-muted-foreground">
+                {reaction.users?.map((user) => user.name).join(", ") || "No one"}
+              </p>
+            </PopoverContent>
+          </Popover>
+        </div>
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>

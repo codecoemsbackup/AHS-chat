@@ -5,6 +5,12 @@ export function applyReactionEvent(
   event: MessageReactionEvent,
   currentUserId: string,
 ): MessageReactionSummary[] {
+  if (event.reactionDetails) {
+    return event.reactionDetails.map((reaction) => ({
+      ...reaction,
+      reactedByMe: reaction.users.some((user) => user.userId === currentUserId),
+    }));
+  }
   if (event.count === 0) {
     return reactions.filter((reaction) => reaction.emoji !== event.emoji);
   }

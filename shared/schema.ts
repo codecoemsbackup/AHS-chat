@@ -493,6 +493,11 @@ export type MessageReactionSummary = {
   emoji: string;
   count: number;
   reactedByMe: boolean;
+  users?: MessageReactionUser[];
+};
+export type MessageReactionUser = {
+  userId: string;
+  name: string;
 };
 export type MessageReactionEvent = {
   messageId: string;
@@ -500,6 +505,11 @@ export type MessageReactionEvent = {
   count: number;
   userId: string;
   added: boolean;
+  reactionDetails?: Array<{
+    emoji: string;
+    count: number;
+    users: MessageReactionUser[];
+  }>;
 };
 export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
