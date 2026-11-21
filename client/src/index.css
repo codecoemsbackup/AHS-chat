@@ -446,3 +446,25 @@
     inset: -1px;
   }
 }
+
+.message-reaction-emoji-picker {
+  --epr-bg-color: hsl(var(--popover));
+  --epr-dark-bg-color: hsl(var(--popover));
+  --epr-text-color: hsl(var(--popover-foreground));
+  --epr-dark-text-color: hsl(var(--popover-foreground));
+  --epr-picker-border-color: hsl(var(--popover-border));
+  --epr-dark-picker-border-color: hsl(var(--popover-border));
+  --epr-highlight-color: hsl(var(--primary));
+  --epr-hover-bg-color: hsl(var(--accent));
+  --epr-dark-hover-bg-color: hsl(var(--accent));
+  --epr-focus-bg-color: hsl(var(--accent));
+  --epr-search-input-bg-color: hsl(var(--muted));
+  --epr-dark-search-input-bg-color: hsl(var(--muted));
+  --epr-search-input-text-color: hsl(var(--foreground));
+  --epr-search-input-placeholder-color: hsl(var(--muted-foreground));
+  --epr-category-label-bg-color: hsl(var(--popover));
+  --epr-category-label-text-color: hsl(var(--popover-foreground));
+  --epr-category-icon-active-color: hsl(var(--primary));
+  --epr-category-icon-inactive-color: hsl(var(--muted-foreground));
+  --epr-preview-text-color: hsl(var(--popover-foreground));
+}
