@@ -3,6 +3,17 @@ import { Button } from "@/components/ui/button";
 
 const releases = [
   {
+    date: "November 21, 2026",
+    title: "Chat navigation, reactions, and message archiving",
+    features: [
+      "Press / outside a text field to focus the message composer.",
+      "Click a reply preview to jump to its original message, loading older history when needed.",
+      "Hover over reactions to see who reacted with each emoji, and browse the full searchable emoji picker with frequently used emoji first.",
+      "Keep each channel's newest 500 messages in the database and archive older messages, reaction details, poll votes, and channel attachments to persistent files while keeping history visible.",
+      "Archived polls and reactions are read-only. On Render, message archiving requires a Persistent Disk and the MESSAGE_ARCHIVE_DIR setting.",
+    ],
+  },
+  {
     date: "October 7, 2026",
     title: "Mobile-friendly chat layout",
     features: [

@@ -16,6 +16,8 @@ Usernames accept 3-20 Unicode letters or numbers from any language, plus undersc
 
 Messages, including private messages and polls, support emoji reactions. Each person can add up to 10 distinct emoji reactions to a message and remove them by selecting them again.
 
+Hover over a message's reactions to see who reacted with each emoji. The searchable emoji picker includes the full emoji menu and puts frequently used emoji first. Press `/` outside a text field to focus the message composer. Click a reply preview to jump to the original message; older history is loaded when needed.
+
 Channel message archives keep Neon database usage bounded. Each channel retains its newest 500 message records in Neon; older messages, reaction details, poll votes, and channel attachment files are archived to disk and remain visible in channel history. Archived polls and reactions are read-only. Direct messages and profile avatars are not archived.
 
 On Render, attach a Persistent Disk mounted at `/var/data` and set `MESSAGE_ARCHIVE_DIR=/var/data/message-archives` in the web service environment. The application archives existing overflow at startup and moves the oldest channel messages to disk as new messages arrive. Without this setting, the app keeps the existing database data and rejects new channel messages once a channel reaches 500 database records rather than writing archives to ephemeral storage.
