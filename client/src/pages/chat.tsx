@@ -269,7 +269,8 @@ export default function ChatPage() {
     queryKey: activeChannelId
       ? [`/api/channels/${activeChannelId}/messages`]
       : ["/api/channels/none/messages"],
-    enabled: !!activeChannelId,
+    enabled: !!activeChannelId && !selectedDmId,
+    staleTime: 0,
   });
   const messages = messagePage?.messages || [];
 

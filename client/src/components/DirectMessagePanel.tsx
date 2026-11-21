@@ -56,6 +56,7 @@ export default function DirectMessagePanel({
   const { data: messagePage, isLoading } = useQuery<MessagePage<DmMessageWithSender>>({
     queryKey: [messagesUrl],
     enabled: conversation.status === "accepted",
+    staleTime: 0,
   });
   const messages = messagePage?.messages || [];
 
