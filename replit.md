@@ -95,7 +95,8 @@ Preferred communication style: Simple, everyday language.
 - Server moderation records with the target user, banning admin, reason, and timestamp
 
 *User Permission Fields:*
-- `isAdmin`, `isOwner`, and `allowAdminManagement`
+- `isAdmin` and `isOwner`; owners manage admin access, and only CodeCoems manages owner access
+- `allowAdminManagement` is a legacy database field and does not grant admin-management permissions
 - The `CodeCoems` username is automatically made the owner and an admin
 
 **Data Migration:**

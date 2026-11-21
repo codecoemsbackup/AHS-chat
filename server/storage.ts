@@ -204,7 +204,7 @@ export interface IStorage {
 
   getMembers(): Promise<ServerMember[]>;
   updateAdmin(userId: string, isAdmin: boolean): Promise<User>;
-  updateAdminDelegation(userId: string, enabled: boolean): Promise<User>;
+  updateOwner(userId: string, isOwner: boolean): Promise<User>;
   banUser(userId: string, bannedBy: string, reason?: string): Promise<void>;
   unbanUser(userId: string): Promise<void>;
   isUserBanned(userId: string): Promise<boolean>;
@@ -387,9 +387,10 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(users)
       .set({
-        isOwner: sql`coalesce(lower(${users.username}), '') = 'codecoems'`,
+        isOwner: true,
         updatedAt: new Date(),
-      });
+      })
+      .where(sql`lower(${users.username}) = 'codecoems'`);
     await db
       .update(users)
       .set({ isAdmin: true, updatedAt: new Date() })
@@ -662,10 +663,14 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateAdminDelegation(userId: string, enabled: boolean): Promise<User> {
+  async updateOwner(userId: string, isOwner: boolean): Promise<User> {
     const [user] = await db
       .update(users)
-      .set({ allowAdminManagement: enabled, updatedAt: new Date() })
+      .set({
+        isOwner,
+        ...(isOwner ? { isAdmin: true } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, userId))
       .returning();
     return user;

@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -27,6 +26,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import CodeCoemsCrown from "@/components/CodeCoemsCrown";
 import type { Channel, User } from "@shared/schema";
 
 export type ServerMember = User & {
@@ -59,7 +59,9 @@ export default function ServerSettingsDialog({
   const [memberName, setMemberName] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const canManageAdmins = actor.isOwner || actor.allowAdminManagement;
+  const canManageAdmins = actor.isOwner;
+  const canAssignOwners =
+    actor.isOwner && actor.username?.toLowerCase() === "codecoems";
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ["/api/server"] });
@@ -135,6 +137,16 @@ export default function ServerSettingsDialog({
           isAdmin: !member.isAdmin,
         }),
       `${member.username || "Member"} is ${member.isAdmin ? "no longer" : "now"} an admin.`,
+    );
+  };
+
+  const toggleOwner = (member: ServerMember) => {
+    void run(
+      () =>
+        apiRequest(`/api/server/members/${member.id}/owner`, "PATCH", {
+          isOwner: !member.isOwner,
+        }),
+      `${member.username || "Member"} is ${member.isOwner ? "no longer" : "now"} an owner.`,
     );
   };
 
@@ -288,34 +300,12 @@ export default function ServerSettingsDialog({
             </div>
           ) : (
             <div className="space-y-4">
-              {actor.isOwner && actor.username?.toLowerCase() === "codecoems" && (
-                <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
-                  <Crown className="h-5 w-5 text-amber-500" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">Admin delegation</p>
-                    <p className="text-sm text-muted-foreground">
-                      Let trusted admins grant or remove admin access for other members.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={actor.allowAdminManagement}
-                    onCheckedChange={(enabled) =>
-                      void run(
-                        () => apiRequest("/api/server/admin-delegation", "PATCH", { enabled }),
-                        enabled ? "Admins can now manage admin access." : "Only you can manage admin access.",
-                      )
-                    }
-                    aria-label="Allow admins to manage admin access"
-                  />
-                </div>
-              )}
-
               <div className="space-y-2">
                 {members.map((member) => (
                   <div key={member.id} className="rounded-lg border border-border p-3">
                     <div className="flex items-center gap-3">
                       <div className="h-9 w-9 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
-                        {member.isOwner ? <Crown className="h-4 w-4 text-amber-500" /> : <UserRound className="h-4 w-4 text-primary" />}
+                        <UserRound className="h-4 w-4 text-primary" />
                       </div>
                       <div className="min-w-0 flex-1">
                         {editingMember === member.id ? (
@@ -330,7 +320,10 @@ export default function ServerSettingsDialog({
                             <Button size="sm" variant="ghost" onClick={() => setEditingMember(null)}>Cancel</Button>
                           </div>
                         ) : (
-                          <p className="font-medium truncate">{member.username || member.firstName || "Unnamed member"}</p>
+                          <p className="flex items-center gap-1 font-medium truncate">
+                            <span className="truncate">{member.username || member.firstName || "Unnamed member"}</span>
+                            <CodeCoemsCrown username={member.username} />
+                          </p>
                         )}
                         <div className="flex items-center gap-2 mt-1">
                           {member.isOwner && <Badge variant="outline">Owner</Badge>}
@@ -338,6 +331,16 @@ export default function ServerSettingsDialog({
                           {member.isBanned && <Badge variant="destructive">Banned</Badge>}
                         </div>
                       </div>
+                      {canAssignOwners && member.username?.toLowerCase() !== "codecoems" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`${member.isOwner ? "Remove owner from" : "Make"} ${member.username || "member"}`}
+                          onClick={() => toggleOwner(member)}
+                        >
+                          <Crown className={`h-4 w-4 ${member.isOwner ? "text-amber-500" : "text-muted-foreground"}`} />
+                        </Button>
+                      )}
                       {!member.isOwner && (
                         <>
                           <Button

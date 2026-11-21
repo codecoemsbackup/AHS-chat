@@ -9,6 +9,7 @@ import type {
   MessageReactionSummary,
 } from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
+import CodeCoemsCrown from "@/components/CodeCoemsCrown";
 import MessageInput, { type GifResult } from "@/components/MessageInput";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -292,8 +293,9 @@ export default function DirectMessagePanel({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-semibold" style={{ color: conversation.peer.usernameColor }}>
+          <h1 className="flex min-w-0 items-center gap-1 truncate font-semibold" style={{ color: conversation.peer.usernameColor }}>
             {peerName}
+            <CodeCoemsCrown username={conversation.peer.username} />
           </h1>
           <p className="text-xs text-muted-foreground">
             {conversation.peer.customStatus ||

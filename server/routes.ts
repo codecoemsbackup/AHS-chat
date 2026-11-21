@@ -21,7 +21,7 @@ import {
   updateAppearanceSchema,
   updateChannelSchema,
   updateAdminSchema,
-  updateAdminDelegationSchema,
+  updateOwnerSchema,
   banUserSchema,
   localSignupSchema,
   localLoginSchema,
@@ -41,6 +41,7 @@ import {
   removeUpload,
   saveUpload,
 } from "./fileUploads";
+import { appendStaffAuditLog, getStaffAuditLogs } from "./staffAuditLog";
 
 const SERVER_ROOM = "server:main";
 const STAFF_ROOM = "server:main:staff";
@@ -837,36 +838,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch(
-    "/api/server/admin-delegation",
-    isAuthenticated,
-    async (req: any, res: Response) => {
-      try {
-        const actor = await adminUser(req, res);
-        if (!actor) return;
-        if (!actor.isOwner || actor.username?.toLowerCase() !== "codecoems") {
-          return res.status(403).json({
-            message: "Only the CodeCoems owner can enable admin delegation",
-          });
-        }
-        const parsed = updateAdminDelegationSchema.parse(req.body);
-        const user = await storage.updateAdminDelegation(actor.id, parsed.enabled);
-        res.json(publicUser(user, actor));
-      } catch (error: any) {
-        sendError(res, error, "Failed to update admin delegation");
-      }
-    },
-  );
-
-  app.patch(
     "/api/server/members/:userId/admin",
     isAuthenticated,
     async (req: any, res: Response) => {
       try {
         const actor = await adminUser(req, res);
         if (!actor) return;
-        if (!actor.isOwner && !actor.allowAdminManagement) {
+        if (!actor.isOwner) {
           return res.status(403).json({
-            message: "Admin delegation is not enabled by CodeCoems",
+            message: "Only owners can manage admin access",
           });
         }
         const target = await storage.getUser(req.params.userId);
@@ -886,6 +866,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(publicUser(user, actor));
       } catch (error: any) {
         sendError(res, error, "Failed to update admin permission");
+      }
+    },
+  );
+
+  app.patch(
+    "/api/server/members/:userId/owner",
+    isAuthenticated,
+    async (req: any, res: Response) => {
+      try {
+        const actor = await adminUser(req, res);
+        if (!actor) return;
+        if (!actor.isOwner || actor.username?.toLowerCase() !== "codecoems") {
+          return res.status(403).json({
+            message: "Only CodeCoems can assign owner access",
+          });
+        }
+        const target = await storage.getUser(req.params.userId);
+        if (!target) return res.status(404).json({ message: "Member not found" });
+        if (target.username?.toLowerCase() === "codecoems") {
+          return res.status(400).json({ message: "CodeCoems must remain an owner" });
+        }
+        const parsed = updateOwnerSchema.parse(req.body);
+        const updatedUser = await storage.updateOwner(target.id, parsed.isOwner);
+        const targetSocketId = connectedUsers.get(target.id);
+        const targetSocket = targetSocketId
+          ? ioFor(app)?.sockets.sockets.get(targetSocketId)
+          : undefined;
+        if (updatedUser.isAdmin) targetSocket?.join(STAFF_ROOM);
+        else targetSocket?.leave(STAFF_ROOM);
+        ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(updatedUser));
+        res.json(publicUser(updatedUser, actor));
+      } catch (error: any) {
+        sendError(res, error, "Failed to update owner permission");
       }
     },
   );
@@ -960,6 +973,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ success: true });
       } catch (error: any) {
         sendError(res, error, "Failed to unban member");
+      }
+    },
+  );
+
+  app.get(
+    "/api/channels/:channelId/audit-logs",
+    isAuthenticated,
+    async (req: any, res: Response) => {
+      try {
+        const actor = await adminUser(req, res);
+        if (!actor) return;
+        const channel = await storage.getChannel(req.params.channelId);
+        if (!channel || channel.serverId !== "main" || !isStaffChannel(channel.name)) {
+          return res.status(404).json({ message: "Channel not found" });
+        }
+        res.json(await getStaffAuditLogs());
+      } catch (error) {
+        sendError(res, error, "Failed to fetch staff audit logs", 500);
       }
     },
   );
@@ -1080,6 +1111,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           actor.id,
           parsed.emoji,
         );
+        const auditLog = await appendStaffAuditLog({
+          action: result.added ? "reaction_added" : "reaction_removed",
+          actorName: actor.username || actor.firstName || "Member",
+          channelId: channel.id,
+          channelName: channel.name,
+          messageId: req.params.messageId,
+          emoji: parsed.emoji,
+        });
+        ioFor(app)?.to(STAFF_ROOM).emit("staff:audit-log", auditLog);
         const count = result.reactions.find((reaction) => reaction.emoji === parsed.emoji)?.count || 0;
         ioFor(app)?.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:reaction", {
           channelId: channel.id,
@@ -1111,6 +1151,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const channel = await storage.getChannelForMessage(req.params.messageId);
         if (!channel) return res.status(404).json({ message: "Message not found" });
         await storage.deleteMessage(req.params.messageId, actor.id);
+        const auditLog = await appendStaffAuditLog({
+          action: "message_deleted",
+          actorName: actor.username || actor.firstName || "Member",
+          channelId: channel.id,
+          channelName: channel.name,
+          messageId: req.params.messageId,
+        });
+        ioFor(app)?.to(STAFF_ROOM).emit("staff:audit-log", auditLog);
         ioFor(app)?.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:deleted", {
           messageId: req.params.messageId,
         });

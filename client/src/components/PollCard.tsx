@@ -8,6 +8,7 @@ import type {
   ServerMessageWithRelations,
 } from "@shared/schema";
 import MessageReactions from "@/components/MessageReactions";
+import CodeCoemsCrown from "@/components/CodeCoemsCrown";
 
 interface PollCardProps {
   poll: PollDefinition;
@@ -91,7 +92,11 @@ export default function PollCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-muted-foreground">
-            <span style={senderColor ? { color: senderColor } : undefined}>{senderName}</span> created a poll
+            <span className="inline-flex items-center gap-1" style={senderColor ? { color: senderColor } : undefined}>
+              {senderName}
+              <CodeCoemsCrown username={senderName} />
+            </span>{" "}
+            created a poll
           </p>
           {canViewVoters ? (
             <button

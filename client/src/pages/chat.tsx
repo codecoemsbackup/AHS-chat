@@ -13,6 +13,7 @@ import {
   Settings,
   Palette,
   Users,
+  Crown,
   Camera,
   Pencil,
   Bell,
@@ -41,6 +42,7 @@ import type {
   MessageReactionSummary,
   Server,
   ServerMessageWithRelations,
+  StaffAuditLog,
   User,
 } from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
@@ -51,6 +53,7 @@ import MessageInput, {
 import PollCard from "@/components/PollCard";
 import PollCreateDialog from "@/components/PollCreateDialog";
 import UserAvatar from "@/components/UserAvatar";
+import CodeCoemsCrown from "@/components/CodeCoemsCrown";
 import AvatarCropDialog from "@/components/AvatarCropDialog";
 import ThemeToggle from "@/components/ThemeToggle";
 import BrandLogo from "@/components/BrandLogo";
@@ -273,6 +276,13 @@ export default function ChatPage() {
     staleTime: 0,
   });
   const messages = messagePage?.messages || [];
+  const staffAuditQuery = useQuery<StaffAuditLog[]>({
+    queryKey: activeChannelId
+      ? [`/api/channels/${activeChannelId}/audit-logs`]
+      : ["/api/channels/none/audit-logs"],
+    enabled: !!user?.isAdmin && !!activeChannel && isStaffChannel(activeChannel.name),
+  });
+  const staffAuditLogs = staffAuditQuery.data || [];
 
   useEffect(() => {
     if (location === "/" || location === "") {
@@ -584,6 +594,14 @@ export default function ChatPage() {
     const invalidateServer = () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/server"] });
     };
+    const handleStaffAuditLog = () => {
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          query.queryKey[0].startsWith("/api/channels/") &&
+          query.queryKey[0].endsWith("/audit-logs"),
+      });
+    };
     const handleMemberStatus = ({
       userId,
       status,
@@ -710,6 +728,7 @@ export default function ChatPage() {
     socket.on("member:typing", handleTyping);
     socket.on("member:status", handleMemberStatus);
     socket.on("member:updated", handleMemberUpdated);
+    socket.on("staff:audit-log", handleStaffAuditLog);
     socket.on("channel:created", invalidateServer);
     socket.on("channel:updated", invalidateServer);
     socket.on("channel:deleted", invalidateServer);
@@ -729,6 +748,7 @@ export default function ChatPage() {
       socket.off("member:typing", handleTyping);
       socket.off("member:status", handleMemberStatus);
       socket.off("member:updated", handleMemberUpdated);
+      socket.off("staff:audit-log", handleStaffAuditLog);
       socket.off("channel:created", invalidateServer);
       socket.off("channel:updated", invalidateServer);
       socket.off("channel:deleted", invalidateServer);
@@ -1424,7 +1444,10 @@ export default function ChatPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedMember?.username || "Member profile"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-1">
+              {selectedMember?.username || "Member profile"}
+              <CodeCoemsCrown username={selectedMember?.username} />
+            </DialogTitle>
             <DialogDescription>
               {selectedMember?.status === "online" && !selectedMember.isBanned ? "Online" : "Offline"}
               {selectedMember?.customStatus ? ` · ${selectedMember.customStatus}` : ""}
@@ -1536,10 +1559,11 @@ export default function ChatPage() {
               </button>
               <div className="min-w-0 flex-1">
                 <p
-                  className="truncate text-sm font-semibold"
+                  className="flex items-center gap-1 truncate text-sm font-semibold"
                   style={{ color: user.usernameColor }}
                 >
-                  {user.username || user.firstName || "User"}
+                  <span className="truncate">{user.username || user.firstName || "User"}</span>
+                  <CodeCoemsCrown username={user.username} />
                 </p>
                 <button
                   type="button"
@@ -1667,8 +1691,12 @@ export default function ChatPage() {
                           </span>
                         )}
                       </span>
-                      <span className="truncate" style={{ color: conversation.peer.usernameColor }}>
-                        {peerName}
+                      <span
+                        className="inline-flex min-w-0 items-center gap-1 truncate"
+                        style={{ color: conversation.peer.usernameColor }}
+                      >
+                        <span className="truncate">{peerName}</span>
+                        <CodeCoemsCrown username={conversation.peer.username} />
                       </span>
                     {conversation.status === "pending" && conversation.isIncoming && (
                       <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
@@ -1797,6 +1825,51 @@ export default function ChatPage() {
                 <div className="mx-auto max-w-4xl">
                   {loadingOlderChannel && (
                     <p className="mb-4 text-center text-xs text-muted-foreground">Loading older messages...</p>
+                  )}
+                  {staffChatActive && (
+                    <section className="mb-6 rounded-xl border border-border bg-muted/25 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <ScrollText className="h-4 w-4 text-primary" aria-hidden="true" />
+                        <h2 className="text-sm font-semibold">Staff audit log</h2>
+                        <span className="text-xs text-muted-foreground">Recent message actions</span>
+                      </div>
+                      {staffAuditQuery.isError ? (
+                        <div className="flex items-center justify-between gap-3 text-sm text-destructive">
+                          <span>Could not load audit logs.</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void staffAuditQuery.refetch()}
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      ) : staffAuditQuery.isLoading ? (
+                        <p className="text-sm text-muted-foreground">Loading audit logs...</p>
+                      ) : staffAuditLogs.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No message actions have been logged yet.</p>
+                      ) : (
+                        <ul className="max-h-56 space-y-2 overflow-y-auto pr-2">
+                          {staffAuditLogs.map((entry) => (
+                            <li key={entry.id} className="border-t border-border/70 pt-2 first:border-0 first:pt-0">
+                              <p className="text-sm">
+                                <span className="font-medium">{entry.actorName}</span>{" "}
+                                {entry.action === "message_deleted"
+                                  ? "deleted a message"
+                                  : entry.action === "reaction_added"
+                                    ? `reacted ${entry.emoji || ""} to a message`
+                                    : `removed the ${entry.emoji || ""} reaction from a message`}{" "}
+                                in <span className="font-medium">#{entry.channelName}</span>
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(entry.timestamp).toLocaleString()} · Message {entry.messageId}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
                   )}
                   {messagesLoading ? (
                     <div className="space-y-4">
@@ -2038,11 +2111,11 @@ export default function ChatPage() {
                       isDoNotDisturb={member.doNotDisturb}
                     />
                     <span className="min-w-0 flex-1">
-                      <span
-                        className="block truncate text-sm"
-                        style={{ color: member.usernameColor }}
-                      >
-                        {member.username || "Member"}
+                      <span className="block truncate text-sm" style={{ color: member.usernameColor }}>
+                          <span className="inline-flex max-w-full items-center gap-1">
+                            <span className="truncate">{member.username || "Member"}</span>
+                            <CodeCoemsCrown username={member.username} />
+                          </span>
                       </span>
                       {(member.customStatus || member.isAdmin) && (
                         <span className="block truncate text-xs text-muted-foreground">

@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { AtSign, Download, FileText, Reply, Trash2 } from "lucide-react";
 import UserAvatar from "./UserAvatar";
+import CodeCoemsCrown from "./CodeCoemsCrown";
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/fileUploads";
 import type { MessageReactionSummary, MessageReplyPreview } from "@shared/schema";
@@ -133,8 +134,9 @@ export default function ChatBubble({
         }`}
       >
         {senderName && !isSent && (
-          <span className="mb-1 px-1 text-xs font-semibold text-muted-foreground" style={senderColor ? { color: senderColor } : undefined}>
+          <span className="mb-1 inline-flex items-center gap-1 px-1 text-xs font-semibold text-muted-foreground" style={senderColor ? { color: senderColor } : undefined}>
             {senderName}
+            <CodeCoemsCrown username={senderName} />
           </span>
         )}
         {reply && (

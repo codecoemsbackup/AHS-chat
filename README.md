@@ -22,6 +22,10 @@ Channel message archives keep Neon database usage bounded. Each channel retains 
 
 On Render, attach a Persistent Disk mounted at `/var/data` and set `MESSAGE_ARCHIVE_DIR=/var/data/message-archives` in the web service environment. The application archives existing overflow at startup and moves the oldest channel messages to disk as new messages arrive. Without this setting, the app keeps the existing database data and rejects new channel messages once a channel reaches 500 database records rather than writing archives to ephemeral storage.
 
+Message deletion and reaction add/remove audit entries are stored as JSON Lines in `staff-audit-logs.jsonl` under `MESSAGE_ARCHIVE_DIR` (or `./data` when it is unset), not in the database. Staff can view the recent entries in the private `#staff` channel. Use the persistent disk setting above to keep these logs across deployments.
+
 Users can personalize the app accent and their username display color independently from the Appearance settings.
+
+Owners can appoint or remove admins. Only CodeCoems can appoint or remove owners; admins cannot delegate admin access.
 
 After pulling schema changes, apply them to the configured database with `npm run db:push`.

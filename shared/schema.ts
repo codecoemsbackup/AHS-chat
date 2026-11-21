@@ -377,8 +377,8 @@ export const updateAdminSchema = z.object({
   isAdmin: z.boolean(),
 });
 
-export const updateAdminDelegationSchema = z.object({
-  enabled: z.boolean(),
+export const updateOwnerSchema = z.object({
+  isOwner: z.boolean(),
 });
 
 export const banUserSchema = z.object({
@@ -511,6 +511,16 @@ export type MessageReactionEvent = {
     count: number;
     users: MessageReactionUser[];
   }>;
+};
+export type StaffAuditLog = {
+  id: string;
+  timestamp: string;
+  action: "message_deleted" | "reaction_added" | "reaction_removed";
+  actorName: string;
+  channelId: string;
+  channelName: string;
+  messageId: string;
+  emoji?: string;
 };
 export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
