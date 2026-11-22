@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 const releases = [
   {
     date: "November 22, 2026",
-    title: "Friends, group chats, and private nicknames",
+    title: "Friend requests, group chats, and private nicknames",
     features: [
-      "Send friend requests from the member list; pending requests persist after refresh, and accepted friends stay in your Friends list.",
+      "Send a friend request from a member profile; it stays under Friend requests until accepted, then they appear in your persistent Friends list.",
       "Create named group chats with at least two accepted friends and send real-time group messages.",
       "Set a private nickname for an accepted friend; only you see it, including in group chats.",
     ],
