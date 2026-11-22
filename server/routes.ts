@@ -14,7 +14,10 @@ import {
   insertServerMessageSchema,
   insertDmMessageSchema,
   createDmConversationSchema,
+  createGroupChatSchema,
+  insertGroupChatMessageSchema,
   respondToDmRequestSchema,
+  updateFriendNicknameSchema,
   updateUsernameSchema,
   updateCustomStatusSchema,
   updateDoNotDisturbSchema,
@@ -586,6 +589,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(await storage.getDmConversations(actor.id, actor.isOwner));
     } catch (error) {
       sendError(res, error, "Failed to fetch direct messages", 500);
+    }
+  });
+
+  app.put("/api/friends/:friendId/nickname", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { nickname } = updateFriendNicknameSchema.parse(req.body);
+      await storage.setFriendNickname(actor.id, req.params.friendId, nickname);
+      res.json({ nickname: nickname || null });
+    } catch (error: any) {
+      sendError(res, error, "Failed to update friend nickname");
+    }
+  });
+
+  app.get("/api/group-chats", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      res.json(await storage.getGroupChats(actor.id));
+    } catch (error) {
+      sendError(res, error, "Failed to fetch group chats", 500);
+    }
+  });
+
+  app.post("/api/group-chats", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const parsed = createGroupChatSchema.parse(req.body);
+      const groupChat = await storage.createGroupChat(actor.id, parsed.name, parsed.memberIds);
+      for (const member of groupChat.members) {
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:updated", {
+          groupChatId: groupChat.id,
+        });
+      }
+      res.status(201).json(groupChat);
+    } catch (error: any) {
+      sendError(res, error, "Failed to create group chat");
+    }
+  });
+
+  app.get("/api/group-chats/:groupChatId/messages", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const groupChat = await storage.getGroupChat(req.params.groupChatId, actor.id);
+      if (!groupChat) return res.status(404).json({ message: "Group chat not found" });
+      res.json(await storage.getGroupChatMessages(groupChat.id, actor.id));
+    } catch (error) {
+      sendError(res, error, "Failed to fetch group chat messages", 500);
+    }
+  });
+
+  app.post("/api/group-chats/:groupChatId/messages", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { content } = insertGroupChatMessageSchema.parse(req.body);
+      const groupChat = await storage.getGroupChat(req.params.groupChatId, actor.id);
+      if (!groupChat) return res.status(404).json({ message: "Group chat not found" });
+      const message = await storage.createGroupChatMessage(groupChat.id, actor.id, content);
+      for (const member of groupChat.members) {
+        const nickname = member.id === actor.id
+          ? null
+          : await storage.getFriendNickname(member.id, actor.id);
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:message", {
+          groupChatId: groupChat.id,
+          message: { ...message, sender: { ...message.sender, nickname } },
+        });
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:updated", {
+          groupChatId: groupChat.id,
+        });
+      }
+      res.status(201).json(message);
+    } catch (error: any) {
+      sendError(res, error, "Failed to send group chat message");
     }
   });
 

@@ -8,6 +8,10 @@ import {
   dmConversations,
   dmMessages,
   dmMessageReactions,
+  friendNicknames,
+  groupChats,
+  groupChatMembers,
+  groupChatMessages,
   bannedUsers,
   uploads,
   type User,
@@ -28,6 +32,8 @@ import {
   type DmMessage,
   type InsertDmMessage,
   type DmMessageWithSender,
+  type GroupChatWithMembers,
+  type GroupChatMessageWithSender,
   type MessageReactionSummary,
 } from "@shared/schema";
 import type * as schema from "@shared/schema";
@@ -257,6 +263,13 @@ export interface IStorage {
     added: boolean;
     reactions: MessageReactionSummary[];
   }>;
+  getFriendNickname(ownerId: string, friendId: string): Promise<string | null>;
+  setFriendNickname(ownerId: string, friendId: string, nickname: string): Promise<void>;
+  getGroupChats(userId: string): Promise<GroupChatWithMembers[]>;
+  getGroupChat(groupChatId: string, userId: string): Promise<GroupChatWithMembers | undefined>;
+  createGroupChat(userId: string, name: string, friendIds: string[]): Promise<GroupChatWithMembers>;
+  getGroupChatMessages(groupChatId: string, userId: string): Promise<GroupChatMessageWithSender[]>;
+  createGroupChatMessage(groupChatId: string, senderId: string, content: string): Promise<GroupChatMessageWithSender>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1183,6 +1196,15 @@ export class DatabaseStorage implements IStorage {
           AND ${dmConversations.status} NOT IN ('declined', 'cancelled')`,
       )
       .orderBy(desc(dmConversations.updatedAt));
+    const nicknames = rows.length
+      ? await db
+          .select({ friendId: friendNicknames.friendId, nickname: friendNicknames.nickname })
+          .from(friendNicknames)
+          .where(eq(friendNicknames.ownerId, userId))
+      : [];
+    const nicknameByFriendId = new Map(
+      nicknames.map(({ friendId, nickname }) => [friendId, nickname]),
+    );
     return rows.map(({ conversation, peer }) => ({
       ...conversation,
       peer: {
@@ -1194,9 +1216,204 @@ export class DatabaseStorage implements IStorage {
         customStatus: peer.customStatus,
         isOwner: peer.isOwner,
         usernameColor: peer.usernameColor,
+        nickname: nicknameByFriendId.get(peer.id) || null,
       },
       isIncoming: conversation.requesterId !== userId,
     }));
+  }
+
+  async getFriendNickname(ownerId: string, friendId: string): Promise<string | null> {
+    const [row] = await db
+      .select({ nickname: friendNicknames.nickname })
+      .from(friendNicknames)
+      .where(and(
+        eq(friendNicknames.ownerId, ownerId),
+        eq(friendNicknames.friendId, friendId),
+      ));
+    return row?.nickname || null;
+  }
+
+  async setFriendNickname(ownerId: string, friendId: string, nickname: string): Promise<void> {
+    const [conversation] = await db
+      .select({ id: dmConversations.id })
+      .from(dmConversations)
+      .where(and(
+        eq(dmConversations.status, "accepted"),
+        sql`(
+          (${dmConversations.participantOneId} = ${ownerId}
+            AND ${dmConversations.participantTwoId} = ${friendId})
+          OR (${dmConversations.participantTwoId} = ${ownerId}
+            AND ${dmConversations.participantOneId} = ${friendId})
+        )`,
+      ))
+      .limit(1);
+    if (!conversation) throw new Error("You can only nickname an accepted friend");
+    if (!nickname) {
+      await db.delete(friendNicknames).where(and(
+        eq(friendNicknames.ownerId, ownerId),
+        eq(friendNicknames.friendId, friendId),
+      ));
+      return;
+    }
+    await db
+      .insert(friendNicknames)
+      .values({ ownerId, friendId, nickname, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [friendNicknames.ownerId, friendNicknames.friendId],
+        set: { nickname, updatedAt: new Date() },
+      });
+  }
+
+  async getGroupChats(userId: string): Promise<GroupChatWithMembers[]> {
+    const rows = await db
+      .select({ groupChat: groupChats })
+      .from(groupChatMembers)
+      .innerJoin(groupChats, eq(groupChats.id, groupChatMembers.groupChatId))
+      .where(eq(groupChatMembers.userId, userId))
+      .orderBy(desc(groupChats.updatedAt));
+    const groups = await Promise.all(rows.map(({ groupChat }) =>
+      this.getGroupChat(groupChat.id, userId),
+    ));
+    return groups.filter((group): group is GroupChatWithMembers => !!group);
+  }
+
+  async getGroupChat(
+    groupChatId: string,
+    userId: string,
+  ): Promise<GroupChatWithMembers | undefined> {
+    const [groupChat] = await db
+      .select({ groupChat: groupChats })
+      .from(groupChatMembers)
+      .innerJoin(groupChats, eq(groupChats.id, groupChatMembers.groupChatId))
+      .where(and(
+        eq(groupChats.id, groupChatId),
+        eq(groupChatMembers.userId, userId),
+      ));
+    if (!groupChat) return undefined;
+    const members = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        profileImageUrl: users.profileImageUrl,
+        usernameColor: users.usernameColor,
+        nickname: friendNicknames.nickname,
+      })
+      .from(groupChatMembers)
+      .innerJoin(users, eq(users.id, groupChatMembers.userId))
+      .leftJoin(
+        friendNicknames,
+        and(
+          eq(friendNicknames.friendId, users.id),
+          eq(friendNicknames.ownerId, userId),
+        ),
+      )
+      .where(eq(groupChatMembers.groupChatId, groupChatId));
+    return { ...groupChat.groupChat, members };
+  }
+
+  async createGroupChat(
+    userId: string,
+    name: string,
+    friendIds: string[],
+  ): Promise<GroupChatWithMembers> {
+    if (friendIds.includes(userId) || new Set(friendIds).size !== friendIds.length) {
+      throw new Error("Choose unique friends other than yourself");
+    }
+    const groupChat = await db.transaction(async (transaction) => {
+      for (const friendId of friendIds) {
+        const [bannedFriend] = await transaction
+          .select({ id: bannedUsers.id })
+          .from(bannedUsers)
+          .where(eq(bannedUsers.userId, friendId))
+          .limit(1);
+        if (bannedFriend) throw new Error("Banned members cannot be added to group chats");
+        const [friendship] = await transaction
+          .select({ id: dmConversations.id })
+          .from(dmConversations)
+          .where(and(
+            eq(dmConversations.status, "accepted"),
+            sql`(
+              (${dmConversations.participantOneId} = ${userId}
+                AND ${dmConversations.participantTwoId} = ${friendId})
+              OR (${dmConversations.participantTwoId} = ${userId}
+                AND ${dmConversations.participantOneId} = ${friendId})
+            )`,
+          ))
+          .limit(1);
+        if (!friendship) throw new Error("Groups can only include accepted friends");
+      }
+      const [created] = await transaction
+        .insert(groupChats)
+        .values({ name, creatorId: userId })
+        .returning();
+      await transaction.insert(groupChatMembers).values(
+        [userId, ...friendIds].map((memberId) => ({
+          groupChatId: created.id,
+          userId: memberId,
+        })),
+      );
+      return created;
+    });
+    const result = await this.getGroupChat(groupChat.id, userId);
+    if (!result) throw new Error("Failed to load group chat");
+    return result;
+  }
+
+  async getGroupChatMessages(
+    groupChatId: string,
+    userId: string,
+  ): Promise<GroupChatMessageWithSender[]> {
+    const rows = await db
+      .select({ message: groupChatMessages, sender: users, nickname: friendNicknames.nickname })
+      .from(groupChatMessages)
+      .innerJoin(users, eq(users.id, groupChatMessages.senderId))
+      .leftJoin(
+        friendNicknames,
+        and(
+          eq(friendNicknames.friendId, users.id),
+          eq(friendNicknames.ownerId, userId),
+        ),
+      )
+      .where(eq(groupChatMessages.groupChatId, groupChatId))
+      .orderBy(desc(groupChatMessages.createdAt), desc(groupChatMessages.id))
+      .limit(100);
+    return rows.reverse().map(({ message, sender, nickname }) => ({
+      ...message,
+      sender: {
+        id: sender.id,
+        username: sender.username,
+        profileImageUrl: sender.profileImageUrl,
+        usernameColor: sender.usernameColor,
+        nickname: nickname || null,
+      },
+    }));
+  }
+
+  async createGroupChatMessage(
+    groupChatId: string,
+    senderId: string,
+    content: string,
+  ): Promise<GroupChatMessageWithSender> {
+    const [message] = await db
+      .insert(groupChatMessages)
+      .values({ groupChatId, senderId, content })
+      .returning();
+    await db.update(groupChats)
+      .set({ updatedAt: new Date() })
+      .where(eq(groupChats.id, groupChatId));
+    const [sender] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        profileImageUrl: users.profileImageUrl,
+        usernameColor: users.usernameColor,
+      })
+      .from(users)
+      .where(eq(users.id, senderId));
+    return {
+      ...message,
+      sender: { ...sender, nickname: null },
+    };
   }
 
   async getDmConversation(

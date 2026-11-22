@@ -19,6 +19,7 @@ import {
   Bell,
   BellOff,
   X,
+  Check,
   UserPlus,
   Menu,
   ScrollText,
@@ -40,6 +41,8 @@ import type {
   MessagePage,
   MessageReactionEvent,
   MessageReactionSummary,
+  GroupChatMessageWithSender,
+  GroupChatWithMembers,
   Server,
   ServerMessageWithRelations,
   StaffAuditLog,
@@ -62,6 +65,7 @@ import ServerSettingsDialog, {
   type ServerMember,
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
+import GroupChatPanel from "@/components/GroupChatPanel";
 import RealNameSetup from "@/components/RealNameSetup";
 import EmailSetup from "@/components/EmailSetup";
 import AppearanceSettingsDialog from "@/components/AppearanceSettingsDialog";
@@ -172,10 +176,18 @@ export default function ChatPage() {
   const [location, setLocation] = useLocation();
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedDmId, setSelectedDmId] = useState<string | null>(null);
+  const [selectedGroupChatId, setSelectedGroupChatId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState<ServerMember | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [groupChatCreateOpen, setGroupChatCreateOpen] = useState(false);
+  const [groupChatName, setGroupChatName] = useState("");
+  const [groupChatMemberIds, setGroupChatMemberIds] = useState<string[]>([]);
+  const [groupChatCreating, setGroupChatCreating] = useState(false);
+  const [nicknameDialogOpen, setNicknameDialogOpen] = useState(false);
+  const [friendNicknameDraft, setFriendNicknameDraft] = useState("");
+  const [nicknameSaving, setNicknameSaving] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusDraft, setStatusDraft] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
@@ -198,6 +210,7 @@ export default function ChatPage() {
   const unreadLoadedForUser = useRef<string | null>(null);
   const selectedChannelRef = useRef<string | null>(null);
   const selectedDmRef = useRef<string | null>(null);
+  const selectedGroupChatRef = useRef<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelScrollAreaRef = useRef<HTMLDivElement>(null);
@@ -240,6 +253,10 @@ export default function ChatPage() {
     queryKey: ["/api/dms"],
     enabled: !!user,
   });
+  const { data: groupChats = [], isLoading: groupChatsLoading } = useQuery<GroupChatWithMembers[]>({
+    queryKey: ["/api/group-chats"],
+    enabled: !!user,
+  });
   const channels = serverData?.channels || [];
   const members = serverData?.members || [];
   const currentMember = user ? members.find((member) => member.id === user.id) : undefined;
@@ -278,10 +295,10 @@ export default function ChatPage() {
     channels.find((channel) => channel.name.trim().toLowerCase() === "general") || channels[0];
   const activeChannelId =
     routedChannel?.id ||
-    (!selectedDmId ? selectedChannelId : null) ||
+    (!selectedDmId && !selectedGroupChatId ? selectedChannelId : null) ||
     defaultChannel?.id ||
     null;
-  const viewedChannelId = selectedDmId ? null : activeChannelId;
+  const viewedChannelId = selectedDmId || selectedGroupChatId ? null : activeChannelId;
   const activeChannel = channels.find((channel) => channel.id === activeChannelId);
   const adminOnlyChannel = !!activeChannel && isAdminOnlyChannel(activeChannel.name);
   const pollsChannel =
@@ -296,7 +313,7 @@ export default function ChatPage() {
     queryKey: activeChannelId
       ? [`/api/channels/${activeChannelId}/messages`]
       : ["/api/channels/none/messages"],
-    enabled: !!activeChannelId && !selectedDmId && !auditLogActive,
+    enabled: !!activeChannelId && !selectedDmId && !selectedGroupChatId && !auditLogActive,
     staleTime: 0,
   });
   const messages = messagePage?.messages || [];
@@ -316,6 +333,7 @@ export default function ChatPage() {
     if (location === "/" || location === "") {
       if (!channels.length) return;
       setSelectedDmId(null);
+      setSelectedGroupChatId(null);
       setSelectedChannelId(defaultChannel?.id || null);
       if (defaultChannel) setLocation(getChannelPath(defaultChannel));
       return;
@@ -330,9 +348,29 @@ export default function ChatPage() {
       );
       if (channel) {
         setSelectedDmId(null);
+        setSelectedGroupChatId(null);
         setSelectedChannelId(channel.id);
       } else if (defaultChannel) {
         setSelectedDmId(null);
+        setSelectedGroupChatId(null);
+        setSelectedChannelId(defaultChannel.id);
+        setLocation(getChannelPath(defaultChannel));
+      }
+      return;
+    }
+
+    const groupMatch = location.match(/^\/groups\/([^/]+)\/?$/);
+    if (groupMatch) {
+      if (groupChatsLoading) return;
+      const groupChat = groupChats.find(
+        (candidate) => candidate.id === decodePathSegment(groupMatch[1]),
+      );
+      if (groupChat) {
+        setSelectedDmId(null);
+        setSelectedGroupChatId(groupChat.id);
+      } else if (defaultChannel) {
+        setSelectedDmId(null);
+        setSelectedGroupChatId(null);
         setSelectedChannelId(defaultChannel.id);
         setLocation(getChannelPath(defaultChannel));
       }
@@ -349,9 +387,11 @@ export default function ChatPage() {
           candidate.peer.username?.toLowerCase() === peerRoute,
       );
       if (conversation) {
+        setSelectedGroupChatId(null);
         setSelectedDmId(conversation.id);
       } else if (defaultChannel) {
         setSelectedDmId(null);
+        setSelectedGroupChatId(null);
         setSelectedChannelId(defaultChannel.id);
         setLocation(getChannelPath(defaultChannel));
       }
@@ -361,6 +401,8 @@ export default function ChatPage() {
     defaultChannel,
     dmConversations,
     dmConversationsLoading,
+    groupChats,
+    groupChatsLoading,
     location,
     setLocation,
   ]);
@@ -368,6 +410,7 @@ export default function ChatPage() {
   useEffect(() => {
     selectedChannelRef.current = viewedChannelId;
     selectedDmRef.current = selectedDmId;
+    selectedGroupChatRef.current = selectedGroupChatId;
     setTypingUsers(new Set());
     setReplyingTo(null);
     if (viewedChannelId) {
@@ -378,7 +421,7 @@ export default function ChatPage() {
         return next;
       });
     }
-  }, [selectedDmId, viewedChannelId]);
+  }, [selectedDmId, selectedGroupChatId, viewedChannelId]);
 
   useEffect(() => {
     unreadLoadedForUser.current = null;
@@ -744,6 +787,27 @@ export default function ChatPage() {
           : old,
       );
     };
+    const handleGroupChatMessage = ({
+      groupChatId,
+      message,
+    }: {
+      groupChatId: string;
+      message: GroupChatMessageWithSender;
+    }) => {
+      queryClient.setQueryData<GroupChatMessageWithSender[]>(
+        [`/api/group-chats/${groupChatId}/messages`],
+        (old) =>
+          old?.some((item) => item.id === message.id)
+            ? old
+            : old
+              ? [...old, message]
+              : old,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["/api/group-chats"] });
+    };
+    const handleGroupChatUpdated = () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/group-chats"] });
+    };
 
     socket.on("message:receive", handleMessageReceive);
     socket.on("message:deleted", handleMessageDeleted);
@@ -753,6 +817,8 @@ export default function ChatPage() {
     socket.on("dm:message", handleDmMessage);
     socket.on("dm:updated", handleDmUpdated);
     socket.on("dm:reaction", handleDmReaction);
+    socket.on("group-chat:message", handleGroupChatMessage);
+    socket.on("group-chat:updated", handleGroupChatUpdated);
     socket.on("member:typing", handleTyping);
     socket.on("member:status", handleMemberStatus);
     socket.on("member:updated", handleMemberUpdated);
@@ -773,6 +839,8 @@ export default function ChatPage() {
       socket.off("dm:message", handleDmMessage);
       socket.off("dm:updated", handleDmUpdated);
       socket.off("dm:reaction", handleDmReaction);
+      socket.off("group-chat:message", handleGroupChatMessage);
+      socket.off("group-chat:updated", handleGroupChatUpdated);
       socket.off("member:typing", handleTyping);
       socket.off("member:status", handleMemberStatus);
       socket.off("member:updated", handleMemberUpdated);
@@ -1168,6 +1236,7 @@ export default function ChatPage() {
 
   const staffChatActive =
     !selectedDmId &&
+    !selectedGroupChatId &&
     !!activeChannel &&
     (isStaffChannel(activeChannel.name) || isAuditLogChannel(activeChannel.name));
   const visibleMembers = useMemo(
@@ -1188,6 +1257,7 @@ export default function ChatPage() {
     [visibleMembers, memberSearch],
   );
   const selectedDm = dmConversations.find((conversation) => conversation.id === selectedDmId);
+  const selectedGroupChat = groupChats.find((groupChat) => groupChat.id === selectedGroupChatId);
   const typingNames = members
     .filter((member) => typingUsers.has(member.id))
     .map((member) => member.username || member.firstName || "Someone");
@@ -1264,6 +1334,7 @@ export default function ChatPage() {
   const openDirectMessage = async (member: ServerMember) => {
     const existing = dmConversations.find((conversation) => conversation.peer.id === member.id);
     if (existing) {
+      setSelectedGroupChatId(null);
       setLocation(getDmPath(existing));
       return;
     }
@@ -1274,6 +1345,7 @@ export default function ChatPage() {
           ? [conversation, ...current.filter((item) => item.id !== conversation.id)]
           : [conversation],
       );
+      setSelectedGroupChatId(null);
       setLocation(getDmPath(conversation));
       await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
     } catch (error: any) {
@@ -1282,6 +1354,65 @@ export default function ChatPage() {
         description: error.message || "Please try again.",
         variant: "destructive",
       });
+    }
+  };
+
+  const createGroupChat = async () => {
+    if (groupChatMemberIds.length < 2 || !groupChatName.trim() || groupChatCreating) return;
+    setGroupChatCreating(true);
+    try {
+      const groupChat: GroupChatWithMembers = await apiRequest("/api/group-chats", "POST", {
+        name: groupChatName.trim(),
+        memberIds: groupChatMemberIds,
+      });
+      queryClient.setQueryData<GroupChatWithMembers[]>(["/api/group-chats"], (current) =>
+        [groupChat, ...(current || []).filter((item) => item.id !== groupChat.id)],
+      );
+      setGroupChatCreateOpen(false);
+      setGroupChatName("");
+      setGroupChatMemberIds([]);
+      setSelectedDmId(null);
+      setLocation(`/groups/${encodeURIComponent(groupChat.id)}`);
+      void queryClient.invalidateQueries({ queryKey: ["/api/group-chats"] });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't create group chat",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setGroupChatCreating(false);
+    }
+  };
+
+  const saveFriendNickname = async () => {
+    if (!selectedDm || nicknameSaving) return;
+    setNicknameSaving(true);
+    try {
+      await apiRequest(`/api/friends/${selectedDm.peer.id}/nickname`, "PUT", {
+        nickname: friendNicknameDraft,
+      });
+      setNicknameDialogOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+      await queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          query.queryKey[0].startsWith("/api/group-chats/") &&
+          query.queryKey[0].endsWith("/messages"),
+      });
+      toast({
+        title: friendNicknameDraft.trim()
+          ? "Friend nickname saved"
+          : "Friend nickname removed",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't save friend nickname",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setNicknameSaving(false);
     }
   };
 
@@ -1465,6 +1596,110 @@ export default function ChatPage() {
               onClick={() => void saveCustomStatus(statusDraft)}
             >
               {statusSaving ? "Saving..." : "Save status"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={groupChatCreateOpen}
+        onOpenChange={(open) => {
+          setGroupChatCreateOpen(open);
+          if (!open) {
+            setGroupChatName("");
+            setGroupChatMemberIds([]);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create a group chat</DialogTitle>
+            <DialogDescription>
+              Choose a name and at least two accepted friends. Friend nicknames remain private to you.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={groupChatName}
+            onChange={(event) => setGroupChatName(event.target.value)}
+            placeholder="Group chat name"
+            maxLength={60}
+            aria-label="Group chat name"
+          />
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {dmConversations
+              .filter((conversation) => conversation.status === "accepted")
+              .map((conversation) => {
+                const friendId = conversation.peer.id;
+                const selected = groupChatMemberIds.includes(friendId);
+                const friendName = conversation.peer.nickname ||
+                  conversation.peer.username ||
+                  "Member";
+                return (
+                  <button
+                    key={friendId}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setGroupChatMemberIds((current) =>
+                      selected
+                        ? current.filter((id) => id !== friendId)
+                        : [...current, friendId],
+                    )}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+                  >
+                    <span className={`flex h-5 w-5 items-center justify-center rounded border ${
+                      selected ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                    }`}>
+                      {selected && <Check className="h-3 w-3" />}
+                    </span>
+                    <UserAvatar
+                      name={friendName}
+                      avatarUrl={conversation.peer.profileImageUrl || undefined}
+                      size="sm"
+                    />
+                    <span className="truncate">{friendName}</span>
+                  </button>
+                );
+              })}
+            {!dmConversations.some((conversation) => conversation.status === "accepted") && (
+              <p className="py-3 text-center text-sm text-muted-foreground">
+                Accept friend requests before starting a group.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={
+                groupChatCreating ||
+                !groupChatName.trim() ||
+                groupChatMemberIds.length < 2
+              }
+              onClick={() => void createGroupChat()}
+            >
+              {groupChatCreating ? "Creating..." : "Create group"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={nicknameDialogOpen} onOpenChange={setNicknameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Private friend nickname</DialogTitle>
+            <DialogDescription>
+              Only you will see this nickname. Leave it blank to use their username.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={friendNicknameDraft}
+            onChange={(event) => setFriendNicknameDraft(event.target.value)}
+            placeholder={selectedDm?.peer.username || "Friend nickname"}
+            maxLength={40}
+            aria-label="Private friend nickname"
+          />
+          <DialogFooter>
+            <Button
+              disabled={nicknameSaving || friendNicknameDraft.length > 40}
+              onClick={() => void saveFriendNickname()}
+            >
+              {nicknameSaving ? "Saving..." : "Save nickname"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1683,6 +1918,48 @@ export default function ChatPage() {
               )}
             </div>
             <div className="mb-2 mt-6 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              <span>Group chats</span>
+              <button
+                type="button"
+                className="rounded p-1 text-sm leading-none hover:bg-sidebar-accent"
+                onClick={() => setGroupChatCreateOpen(true)}
+                aria-label="Create group chat"
+                title="Create group chat"
+              >
+                +
+              </button>
+            </div>
+            <div className="space-y-1 pb-2">
+              {groupChats.map((groupChat) => (
+                <button
+                  key={groupChat.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDmId(null);
+                    setLocation(`/groups/${encodeURIComponent(groupChat.id)}`);
+                    setMobileNavigationOpen(false);
+                  }}
+                  data-active={selectedGroupChatId === groupChat.id}
+                  className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
+                    selectedGroupChatId === groupChat.id
+                      ? "font-semibold"
+                      : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
+                  }`}
+                >
+                  <UsersRound className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{groupChat.name}</span>
+                  <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                    {groupChat.members.length}
+                  </span>
+                </button>
+              ))}
+              {!groupChats.length && (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  Create a group with your accepted friends.
+                </p>
+              )}
+            </div>
+            <div className="mb-2 mt-6 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               <span>Direct messages</span>
               <span className="font-normal normal-case tracking-normal">
                 {dmConversations.filter((conversation) => conversation.status === "pending").length || ""}
@@ -1690,13 +1967,14 @@ export default function ChatPage() {
             </div>
             <div className="space-y-1 pb-2">
               {dmConversations.map((conversation) => {
-                const peerName =
+                const peerName = conversation.peer.nickname ||
                   conversation.peer.username || conversation.peer.firstName || "Member";
                 return (
                   <button
                     key={conversation.id}
                     type="button"
                     onClick={() => {
+                      setSelectedGroupChatId(null);
                       setLocation(getDmPath(conversation));
                       setMobileNavigationOpen(false);
                     }}
@@ -1767,7 +2045,16 @@ export default function ChatPage() {
         </aside>
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {selectedDm ? (
+          {selectedGroupChat ? (
+            <GroupChatPanel
+              groupChat={selectedGroupChat}
+              currentUserId={user.id}
+              onOpenNavigation={() => setMobileNavigationOpen(true)}
+              onBack={() => {
+                if (defaultChannel) setLocation(getChannelPath(defaultChannel));
+              }}
+            />
+          ) : selectedDm ? (
             <DirectMessagePanel
               conversation={selectedDm}
               currentUserId={user.id}
@@ -1777,6 +2064,10 @@ export default function ChatPage() {
               }}
               onRespond={(accepted) => void respondToDmRequest(accepted)}
               onCancelRequest={() => void cancelDmRequest()}
+              onEditNickname={() => {
+                setFriendNicknameDraft(selectedDm.peer.nickname || "");
+                setNicknameDialogOpen(true);
+              }}
             />
           ) : activeChannel ? (
             <>

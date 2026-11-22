@@ -6,7 +6,9 @@ Discord: CodeCoems
 
 Members can start private direct-message conversations from the member list. New conversations are message requests; recipients must accept before either member can read or send messages. The sender can cancel a pending request. Accepted direct messages support replies with quoted message previews.
 
-Signed-in chat routes use `/server/<channel>` for channels and `/dms/<username>` for direct messages. The root route redirects to the default channel.
+Accepted friends can be given a private nickname that only the person who set it can see. You can also create named group chats with at least two accepted friends; group messages are available to every group member.
+
+Signed-in chat routes use `/server/<channel>` for channels, `/dms/<username>` for direct messages, and `/groups/<id>` for group chats. The root route redirects to the default channel.
 
 Anyone can view `/features` for the feature list and dated patch notes. Add new releases at the top of the releases list in `client/src/pages/features.tsx`.
 

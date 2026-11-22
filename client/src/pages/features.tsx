@@ -3,6 +3,14 @@ import { Button } from "@/components/ui/button";
 
 const releases = [
   {
+    date: "November 22, 2026",
+    title: "Group chats and private friend nicknames",
+    features: [
+      "Create named group chats with at least two accepted friends and send real-time group messages.",
+      "Set a private nickname for an accepted friend; only you see it, including in group chats.",
+    ],
+  },
+  {
     date: "November 21, 2026",
     title: "Persistent channel navigation and separate staff audit log",
     features: [

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Menu, MessageSquare, X } from "lucide-react";
+import { ArrowLeft, Check, Menu, MessageSquare, Pencil, X } from "lucide-react";
 import type {
   DmConversationWithPeer,
   DmMessageWithSender,
@@ -26,6 +26,7 @@ interface DirectMessagePanelProps {
   onBack: () => void;
   onRespond: (accepted: boolean) => void;
   onCancelRequest: () => void;
+  onEditNickname: () => void;
 }
 
 export default function DirectMessagePanel({
@@ -35,6 +36,7 @@ export default function DirectMessagePanel({
   onBack,
   onRespond,
   onCancelRequest,
+  onEditNickname,
 }: DirectMessagePanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -52,7 +54,10 @@ export default function DirectMessagePanel({
   const previousMessagesRef = useRef<{ conversationId: string; lastMessageId?: string }>({
     conversationId: conversation.id,
   });
-  const peerName = conversation.peer.username || conversation.peer.firstName || "Member";
+  const peerName = conversation.peer.nickname ||
+    conversation.peer.username ||
+    conversation.peer.firstName ||
+    "Member";
   const messagesUrl = `/api/dms/${conversation.id}/messages`;
   const { data: messagePage, isLoading } = useQuery<MessagePage<DmMessageWithSender>>({
     queryKey: [messagesUrl],
@@ -302,6 +307,17 @@ export default function DirectMessagePanel({
               (conversation.status === "accepted" ? "Direct message" : "Direct message request")}
           </p>
         </div>
+        {conversation.status === "accepted" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onEditNickname}
+            aria-label={`Edit your nickname for ${conversation.peer.username || "friend"}`}
+            title="Edit your private friend nickname"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
       </header>
 
       {conversation.status === "accepted" ? (

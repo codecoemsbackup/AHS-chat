@@ -223,6 +223,69 @@ export const dmMessageReactions = pgTable(
   ],
 );
 
+export const friendNicknames = pgTable(
+  "friend_nicknames",
+  {
+    ownerId: varchar("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    friendId: varchar("friend_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    nickname: varchar("nickname", { length: 40 }).notNull(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("friend_nicknames_owner_friend_unique").on(table.ownerId, table.friendId),
+    index("friend_nicknames_owner_idx").on(table.ownerId),
+  ],
+);
+
+export const groupChats = pgTable("group_chats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 60 }).notNull(),
+  creatorId: varchar("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const groupChatMembers = pgTable(
+  "group_chat_members",
+  {
+    groupChatId: varchar("group_chat_id")
+      .notNull()
+      .references(() => groupChats.id, { onDelete: "cascade" }),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("group_chat_members_chat_user_unique").on(table.groupChatId, table.userId),
+    index("group_chat_members_user_idx").on(table.userId),
+  ],
+);
+
+export const groupChatMessages = pgTable(
+  "group_chat_messages",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    groupChatId: varchar("group_chat_id")
+      .notNull()
+      .references(() => groupChats.id, { onDelete: "cascade" }),
+    senderId: varchar("sender_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("group_chat_messages_chat_created_idx").on(table.groupChatId, table.createdAt),
+  ],
+);
+
 export const bannedUsers = pgTable("banned_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id")
@@ -342,6 +405,27 @@ export const createDmConversationSchema = z.object({
 
 export const respondToDmRequestSchema = z.object({
   accepted: z.boolean(),
+});
+
+export const updateFriendNicknameSchema = z.object({
+  nickname: z.string().trim().max(40),
+});
+
+export const createGroupChatSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  memberIds: z.array(z.string().min(1)).min(2).max(20),
+}).superRefine(({ memberIds }, context) => {
+  if (new Set(memberIds).size !== memberIds.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Group members must be unique",
+      path: ["memberIds"],
+    });
+  }
+});
+
+export const insertGroupChatMessageSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
 });
 
 export const USERNAME_PATTERN = new RegExp("^[\\p{L}\\p{M}\\p{N}_]+$", "u");
@@ -526,7 +610,9 @@ export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;
 export type DmConversationWithPeer = DmConversation & {
-  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus" | "isOwner" | "usernameColor">;
+  peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus" | "isOwner" | "usernameColor"> & {
+    nickname?: string | null;
+  };
   isIncoming: boolean;
 };
 export type DmMessageWithSender = DmMessage & {
@@ -534,4 +620,17 @@ export type DmMessageWithSender = DmMessage & {
   reply?: MessageReplyPreview;
   reactions?: MessageReactionSummary[];
 };
+export type GroupChat = typeof groupChats.$inferSelect;
+export type GroupChatMember = Pick<User, "id" | "username" | "profileImageUrl" | "usernameColor"> & {
+  nickname: string | null;
+};
+export type GroupChatWithMembers = GroupChat & { members: GroupChatMember[] };
+export type GroupChatMessage = typeof groupChatMessages.$inferSelect;
+export type GroupChatMessageWithSender = GroupChatMessage & {
+  sender: Pick<User, "id" | "username" | "profileImageUrl" | "usernameColor"> & {
+    nickname: string | null;
+  };
+};
+export type CreateGroupChat = z.infer<typeof createGroupChatSchema>;
+export type InsertGroupChatMessage = z.infer<typeof insertGroupChatMessageSchema>;
 export type BannedUser = typeof bannedUsers.$inferSelect;
