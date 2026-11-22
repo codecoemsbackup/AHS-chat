@@ -36,6 +36,7 @@ function Router() {
           <Route path="/" component={ChatPage} />
           <Route path="/server/:channel" component={ChatPage} />
           <Route path="/dms/:user" component={ChatPage} />
+          <Route path="/groups/:groupChat" component={ChatPage} />
         </>
       ) : (
         <>
