@@ -592,6 +592,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/friends", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { recipientId } = createDmConversationSchema.parse(req.body);
+      if (recipientId === actor.id) {
+        return res.status(400).json({ message: "You cannot add yourself as a friend" });
+      }
+      const recipient = await storage.getUser(recipientId);
+      if (!recipient || (await storage.isUserBanned(recipientId))) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      const conversation = await storage.addFriend(actor.id, recipient.id, actor.isOwner);
+      for (const participantId of [actor.id, recipient.id]) {
+        ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
+          conversationId: conversation.id,
+        });
+      }
+      res.status(201).json(conversation);
+    } catch (error: any) {
+      sendError(res, error, "Failed to add friend");
+    }
+  });
+
   app.put("/api/friends/:friendId/nickname", isAuthenticated, async (req: any, res: Response) => {
     try {
       const actor = await activeUser(req, res);

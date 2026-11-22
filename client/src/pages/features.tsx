@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 const releases = [
   {
     date: "November 22, 2026",
-    title: "Group chats and private friend nicknames",
+    title: "Friends, group chats, and private nicknames",
     features: [
+      "Add friends directly from the member list; they stay in your Friends list after refresh, without a friend-request step.",
       "Create named group chats with at least two accepted friends and send real-time group messages.",
       "Set a private nickname for an accepted friend; only you see it, including in group chats.",
     ],

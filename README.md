@@ -4,7 +4,7 @@ Gmail: codecoems@gmail.com
 Outlook: codecoems@outlook.com
 Discord: CodeCoems
 
-Members can start private direct-message conversations from the member list. New conversations are message requests; recipients must accept before either member can read or send messages. The sender can cancel a pending request. Accepted direct messages support replies with quoted message previews.
+Members can add friends directly from the member list; friendships persist and appear in the Friends list after refresh, without a friend-request step. Starting a private direct message with someone who is not yet a friend still sends a message request; recipients must accept before either member can read or send messages. The sender can cancel a pending request. Accepted direct messages support replies with quoted message previews.
 
 Accepted friends can be given a private nickname that only the person who set it can see. You can also create named group chats with at least two accepted friends; group messages are available to every group member.
 

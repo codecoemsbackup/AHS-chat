@@ -1257,6 +1257,13 @@ export default function ChatPage() {
     [visibleMembers, memberSearch],
   );
   const selectedDm = dmConversations.find((conversation) => conversation.id === selectedDmId);
+  const selectedMemberFriend = selectedMember
+    ? dmConversations.find(
+        (conversation) =>
+          conversation.peer.id === selectedMember.id &&
+          conversation.status === "accepted",
+      )
+    : undefined;
   const selectedGroupChat = groupChats.find((groupChat) => groupChat.id === selectedGroupChatId);
   const typingNames = members
     .filter((member) => typingUsers.has(member.id))
@@ -1275,6 +1282,63 @@ export default function ChatPage() {
         message.content.replace(/[\s\u200B-\u200D\uFEFF]/g, "").length > 0 ||
         Boolean(message.attachmentUrl),
     );
+
+  const friends = dmConversations.filter((conversation) => conversation.status === "accepted");
+  const messageRequests = dmConversations.filter((conversation) => conversation.status === "pending");
+  const renderDmConversation = (conversation: DmConversationWithPeer) => {
+    const peerName = conversation.peer.nickname ||
+      conversation.peer.username ||
+      conversation.peer.firstName ||
+      "Member";
+    return (
+      <button
+        key={conversation.id}
+        type="button"
+        onClick={() => {
+          setSelectedGroupChatId(null);
+          setLocation(getDmPath(conversation));
+          setMobileNavigationOpen(false);
+        }}
+        data-active={selectedDmId === conversation.id}
+        className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
+          selectedDmId === conversation.id
+            ? "font-semibold"
+            : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
+        }`}
+      >
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+          <UserAvatar
+            name={peerName}
+            avatarUrl={conversation.peer.profileImageUrl || undefined}
+            size="sm"
+          />
+          {(dmUnreadCounts[conversation.id] || 0) > 0 && (
+            <span
+              className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+              aria-label={`${dmUnreadCounts[conversation.id]} unread message${dmUnreadCounts[conversation.id] === 1 ? "" : "s"}`}
+            >
+              {dmUnreadCounts[conversation.id] > 99 ? "99+" : dmUnreadCounts[conversation.id]}
+            </span>
+          )}
+        </span>
+        <span
+          className="inline-flex min-w-0 items-center gap-1 truncate"
+          style={{ color: conversation.peer.usernameColor }}
+        >
+          <span className="truncate">{peerName}</span>
+          <CodeCoemsCrown username={conversation.peer.username} />
+        </span>
+        {conversation.status === "pending" && conversation.isIncoming && (
+          <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+            Request
+          </span>
+        )}
+        {conversation.status === "pending" && !conversation.isIncoming && (
+          <span className="ml-auto text-[10px]">Pending</span>
+        )}
+      </button>
+    );
+  };
 
   const renderChannel = (channel: Channel) => (
     <button
@@ -1351,6 +1415,28 @@ export default function ChatPage() {
     } catch (error: any) {
       toast({
         title: "Couldn't start direct message",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const addFriend = async (member: ServerMember) => {
+    try {
+      const conversation: DmConversationWithPeer = await apiRequest("/api/friends", "POST", {
+        recipientId: member.id,
+      });
+      queryClient.setQueryData<DmConversationWithPeer[]>(["/api/dms"], (current) =>
+        [conversation, ...(current || []).filter((item) => item.id !== conversation.id)],
+      );
+      setSelectedMember(null);
+      setSelectedGroupChatId(null);
+      setLocation(getDmPath(conversation));
+      await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+      toast({ title: "Friend added", description: `${member.username || "Member"} is now your friend.` });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't add friend",
         description: error.message || "Please try again.",
         variant: "destructive",
       });
@@ -1742,10 +1828,16 @@ export default function ChatPage() {
             !selectedMember.isBanned && (
               <Button
                 className="w-full"
-                onClick={() => void openDirectMessage(selectedMember)}
+                onClick={() => selectedMemberFriend
+                  ? void openDirectMessage(selectedMember)
+                  : void addFriend(selectedMember)}
               >
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add friend
+                {selectedMemberFriend ? (
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                ) : (
+                  <UserPlus className="mr-2 h-4 w-4" />
+                )}
+                {selectedMemberFriend ? "Message friend" : "Add friend"}
               </Button>
             )}
         </DialogContent>
@@ -1960,69 +2052,28 @@ export default function ChatPage() {
               )}
             </div>
             <div className="mb-2 mt-6 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-              <span>Direct messages</span>
+              <span>Friends</span>
+              <span className="font-normal normal-case tracking-normal">{friends.length || ""}</span>
+            </div>
+            <div className="space-y-1 pb-2">
+              {friends.map(renderDmConversation)}
+              {!friends.length && (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  Add someone from the member list to make them your friend.
+                </p>
+              )}
+            </div>
+            <div className="mb-2 mt-4 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              <span>Message requests</span>
               <span className="font-normal normal-case tracking-normal">
-                {dmConversations.filter((conversation) => conversation.status === "pending").length || ""}
+                {messageRequests.length || ""}
               </span>
             </div>
             <div className="space-y-1 pb-2">
-              {dmConversations.map((conversation) => {
-                const peerName = conversation.peer.nickname ||
-                  conversation.peer.username || conversation.peer.firstName || "Member";
-                return (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedGroupChatId(null);
-                      setLocation(getDmPath(conversation));
-                      setMobileNavigationOpen(false);
-                    }}
-                  data-active={selectedDmId === conversation.id}
-                  className={`channel-nav-item flex w-full items-center gap-2 px-3 text-left text-sm font-medium ${
-                    selectedDmId === conversation.id
-                      ? "font-semibold"
-                      : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
-                  }`}
-                  >
-                      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-                        <UserAvatar
-                          name={peerName}
-                          avatarUrl={conversation.peer.profileImageUrl || undefined}
-                          size="sm"
-                        />
-                        {(dmUnreadCounts[conversation.id] || 0) > 0 && (
-                          <span
-                            className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
-                            aria-label={`${dmUnreadCounts[conversation.id]} unread message${dmUnreadCounts[conversation.id] === 1 ? "" : "s"}`}
-                          >
-                            {dmUnreadCounts[conversation.id] > 99
-                              ? "99+"
-                              : dmUnreadCounts[conversation.id]}
-                          </span>
-                        )}
-                      </span>
-                      <span
-                        className="inline-flex min-w-0 items-center gap-1 truncate"
-                        style={{ color: conversation.peer.usernameColor }}
-                      >
-                        <span className="truncate">{peerName}</span>
-                        <CodeCoemsCrown username={conversation.peer.username} />
-                      </span>
-                    {conversation.status === "pending" && conversation.isIncoming && (
-                      <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
-                        Request
-                      </span>
-                    )}
-                    {conversation.status === "pending" && !conversation.isIncoming && (
-                      <span className="ml-auto text-[10px]">Pending</span>
-                    )}
-                  </button>
-                );
-              })}
-              {!dmConversations.length && (
+              {messageRequests.map(renderDmConversation)}
+              {!messageRequests.length && (
                 <p className="px-3 py-2 text-xs text-muted-foreground">
-                  Start a private chat from the member list.
+                  Private message requests will appear here.
                 </p>
               )}
             </div>
