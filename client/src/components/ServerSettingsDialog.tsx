@@ -327,7 +327,7 @@ export default function ServerSettingsDialog({
                         )}
                         <div className="flex items-center gap-2 mt-1">
                           {member.isOwner && <Badge variant="outline">Owner</Badge>}
-                          {member.isAdmin && <Badge variant="secondary">Admin</Badge>}
+                          {!member.isOwner && member.isAdmin && <Badge variant="secondary">Admin</Badge>}
                           {member.isBanned && <Badge variant="destructive">Banned</Badge>}
                         </div>
                       </div>

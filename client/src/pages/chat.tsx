@@ -2486,9 +2486,9 @@ export default function ChatPage() {
                             <CodeCoemsCrown username={member.username} />
                           </span>
                       </span>
-                      {(member.customStatus || member.isAdmin) && (
+                      {(member.customStatus || member.isOwner || member.isAdmin) && (
                         <span className="block truncate text-xs text-muted-foreground">
-                          {member.customStatus || "Admin"}
+                          {member.customStatus || (member.isOwner ? "Owner" : "Admin")}
                         </span>
                       )}
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
