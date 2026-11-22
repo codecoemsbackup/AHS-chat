@@ -30,4 +30,4 @@ Users can personalize the app accent and their username display color independen
 
 Owners can appoint or remove admins. Only CodeCoems can appoint or remove owners; admins cannot delegate admin access.
 
-After pulling schema changes, apply them to the configured database with `npm run db:push`.
+The Render build runs `npm run db:push`, which applies the friend nickname and group-chat tables only. This avoids Drizzle's interactive rename prompt for unrelated legacy tables in a non-interactive build. For a reviewed, full-schema sync from an interactive shell, use `npm run db:push:all`.

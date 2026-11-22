@@ -8,6 +8,12 @@ export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
   dialect: "postgresql",
+  tablesFilter: [
+    "friend_nicknames",
+    "group_chats",
+    "group_chat_members",
+    "group_chat_messages",
+  ],
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
