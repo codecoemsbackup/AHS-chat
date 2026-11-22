@@ -6,7 +6,7 @@ const releases = [
     date: "November 22, 2026",
     title: "Friends, group chats, and private nicknames",
     features: [
-      "Add friends directly from the member list; they stay in your Friends list after refresh, without a friend-request step.",
+      "Send friend requests from the member list; pending requests persist after refresh, and accepted friends stay in your Friends list.",
       "Create named group chats with at least two accepted friends and send real-time group messages.",
       "Set a private nickname for an accepted friend; only you see it, including in group chats.",
     ],

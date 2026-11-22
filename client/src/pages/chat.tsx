@@ -1257,13 +1257,10 @@ export default function ChatPage() {
     [visibleMembers, memberSearch],
   );
   const selectedDm = dmConversations.find((conversation) => conversation.id === selectedDmId);
-  const selectedMemberFriend = selectedMember
-    ? dmConversations.find(
-        (conversation) =>
-          conversation.peer.id === selectedMember.id &&
-          conversation.status === "accepted",
-      )
+  const selectedMemberConversation = selectedMember
+    ? dmConversations.find((conversation) => conversation.peer.id === selectedMember.id)
     : undefined;
+  const selectedMemberFriend = selectedMemberConversation?.status === "accepted";
   const selectedGroupChat = groupChats.find((groupChat) => groupChat.id === selectedGroupChatId);
   const typingNames = members
     .filter((member) => typingUsers.has(member.id))
@@ -1330,7 +1327,7 @@ export default function ChatPage() {
         </span>
         {conversation.status === "pending" && conversation.isIncoming && (
           <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
-            Request
+            Friend request
           </span>
         )}
         {conversation.status === "pending" && !conversation.isIncoming && (
@@ -1415,28 +1412,6 @@ export default function ChatPage() {
     } catch (error: any) {
       toast({
         title: "Couldn't start direct message",
-        description: error.message || "Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const addFriend = async (member: ServerMember) => {
-    try {
-      const conversation: DmConversationWithPeer = await apiRequest("/api/friends", "POST", {
-        recipientId: member.id,
-      });
-      queryClient.setQueryData<DmConversationWithPeer[]>(["/api/dms"], (current) =>
-        [conversation, ...(current || []).filter((item) => item.id !== conversation.id)],
-      );
-      setSelectedMember(null);
-      setSelectedGroupChatId(null);
-      setLocation(getDmPath(conversation));
-      await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
-      toast({ title: "Friend added", description: `${member.username || "Member"} is now your friend.` });
-    } catch (error: any) {
-      toast({
-        title: "Couldn't add friend",
         description: error.message || "Please try again.",
         variant: "destructive",
       });
@@ -1828,16 +1803,18 @@ export default function ChatPage() {
             !selectedMember.isBanned && (
               <Button
                 className="w-full"
-                onClick={() => selectedMemberFriend
-                  ? void openDirectMessage(selectedMember)
-                  : void addFriend(selectedMember)}
+                onClick={() => void openDirectMessage(selectedMember)}
               >
                 {selectedMemberFriend ? (
                   <MessageSquare className="mr-2 h-4 w-4" />
                 ) : (
                   <UserPlus className="mr-2 h-4 w-4" />
                 )}
-                {selectedMemberFriend ? "Message friend" : "Add friend"}
+                {selectedMemberFriend
+                  ? "Message friend"
+                  : selectedMemberConversation
+                    ? "View friend request"
+                    : "Add friend"}
               </Button>
             )}
         </DialogContent>
@@ -2064,7 +2041,7 @@ export default function ChatPage() {
               )}
             </div>
             <div className="mb-2 mt-4 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-              <span>Message requests</span>
+              <span>Friend requests</span>
               <span className="font-normal normal-case tracking-normal">
                 {messageRequests.length || ""}
               </span>
@@ -2073,7 +2050,7 @@ export default function ChatPage() {
               {messageRequests.map(renderDmConversation)}
               {!messageRequests.length && (
                 <p className="px-3 py-2 text-xs text-muted-foreground">
-                  Private message requests will appear here.
+                  Incoming and sent friend requests will appear here.
                 </p>
               )}
             </div>

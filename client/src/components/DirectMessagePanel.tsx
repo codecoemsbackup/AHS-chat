@@ -416,13 +416,13 @@ export default function DirectMessagePanel({
         <div className="flex flex-1 items-center justify-center px-6 py-10">
           <section className="w-full max-w-md border-y border-border py-7 text-center">
             <MessageSquare className="mx-auto mb-3 h-8 w-8 text-primary" />
-            <h2 className="text-lg font-semibold">Message request</h2>
+            <h2 className="text-lg font-semibold">Friend request</h2>
             <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-              {peerName} wants to start a direct conversation. Accept to open the chat. Messages stay unavailable until you accept.
+              {peerName} wants to add you as a friend. Accept to add them to your Friends list and open your chat.
             </p>
             <div className="mt-6 flex justify-center gap-2">
               <Button onClick={() => onRespond(true)}>
-                <Check className="mr-2 h-4 w-4" />Accept
+                <Check className="mr-2 h-4 w-4" />Accept friend request
               </Button>
               <Button variant="outline" onClick={() => onRespond(false)}>
                 <X className="mr-2 h-4 w-4" />Decline
@@ -434,9 +434,9 @@ export default function DirectMessagePanel({
         <div className="flex flex-1 items-center justify-center px-6 py-10">
           <section className="w-full max-w-md border-y border-border py-7 text-center">
             <MessageSquare className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">Request sent</h2>
+            <h2 className="text-lg font-semibold">Friend request sent</h2>
             <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-              You can send messages once {peerName} accepts your request.
+              {peerName} will appear in your Friends list when they accept.
             </p>
             <Button className="mt-6" variant="outline" onClick={onCancelRequest}>
               Cancel request

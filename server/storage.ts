@@ -244,7 +244,6 @@ export interface IStorage {
   getDmConversations(userId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer[]>;
   getDmConversation(conversationId: string, userId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer | undefined>;
   createDmConversation(requesterId: string, peerId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer>;
-  addFriend(userId: string, friendId: string, canViewRealNames?: boolean): Promise<DmConversationWithPeer>;
   respondToDmRequest(conversationId: string, userId: string, accepted: boolean): Promise<DmConversation | undefined>;
   cancelDmRequest(conversationId: string, userId: string): Promise<DmConversation | undefined>;
   getDmMessages(
@@ -1504,27 +1503,6 @@ export class DatabaseStorage implements IStorage {
     const result = await this.getDmConversation(conversation.id, requesterId, canViewRealNames);
     if (!result) throw new Error("Failed to load direct message conversation");
     return result;
-  }
-
-  async addFriend(
-    userId: string,
-    friendId: string,
-    canViewRealNames = false,
-  ): Promise<DmConversationWithPeer> {
-    const conversation = await this.createDmConversation(userId, friendId, canViewRealNames);
-    if (conversation.status !== "accepted") {
-      await db
-        .update(dmConversations)
-        .set({ status: "accepted", updatedAt: new Date() })
-        .where(eq(dmConversations.id, conversation.id));
-    }
-    const acceptedConversation = await this.getDmConversation(
-      conversation.id,
-      userId,
-      canViewRealNames,
-    );
-    if (!acceptedConversation) throw new Error("Failed to load friend conversation");
-    return acceptedConversation;
   }
 
   async respondToDmRequest(
