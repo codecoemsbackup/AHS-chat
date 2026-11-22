@@ -513,6 +513,42 @@ export class DatabaseStorage implements IStorage {
       ON dm_messages (conversation_id, created_at)`);
   }
 
+  async ensureFriendsAndGroupChatsSchema(): Promise<void> {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS friend_nicknames (
+      owner_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      friend_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      nickname varchar(40) NOT NULL,
+      updated_at timestamp DEFAULT now(),
+      CONSTRAINT friend_nicknames_owner_friend_unique UNIQUE (owner_id, friend_id)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS friend_nicknames_owner_idx
+      ON friend_nicknames (owner_id)`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS group_chats (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      name varchar(60) NOT NULL,
+      creator_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS group_chat_members (
+      group_chat_id varchar NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      joined_at timestamp DEFAULT now(),
+      CONSTRAINT group_chat_members_chat_user_unique UNIQUE (group_chat_id, user_id)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS group_chat_members_user_idx
+      ON group_chat_members (user_id)`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS group_chat_messages (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_chat_id varchar NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
+      sender_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content text NOT NULL,
+      created_at timestamp DEFAULT now()
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS group_chat_messages_chat_created_idx
+      ON group_chat_messages (group_chat_id, created_at)`);
+  }
+
   async ensureUploadsSchema(): Promise<void> {
     await db.execute(sql`CREATE TABLE IF NOT EXISTS uploads (
       key varchar PRIMARY KEY,

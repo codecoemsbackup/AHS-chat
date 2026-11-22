@@ -50,6 +50,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await storage.ensureDmSchema();
+  await storage.ensureFriendsAndGroupChatsSchema();
   await storage.ensureUploadsSchema();
   await storage.ensureCustomStatusSchema();
   await storage.ensureDoNotDisturbSchema();
