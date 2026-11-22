@@ -16,6 +16,7 @@ import {
   createDmConversationSchema,
   createGroupChatSchema,
   updateGroupChatSchema,
+  updateGroupChatMemberSchema,
   insertGroupChatMessageSchema,
   respondToDmRequestSchema,
   updateFriendNicknameSchema,
@@ -629,6 +630,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(groupChat);
     } catch (error: any) {
       sendError(res, error, "Failed to create group chat");
+    }
+  });
+
+  app.post("/api/group-chats/:groupChatId/members", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { memberId } = updateGroupChatMemberSchema.parse(req.body);
+      const groupChat = await storage.getGroupChat(req.params.groupChatId, actor.id);
+      if (!groupChat) return res.status(404).json({ message: "Group chat not found" });
+      if (groupChat.creatorId !== actor.id) {
+        return res.status(403).json({ message: "Only the group creator can manage members" });
+      }
+      const updated = await storage.addGroupChatMember(groupChat.id, actor.id, memberId);
+      if (!updated) return res.status(404).json({ message: "Group chat not found" });
+      for (const member of updated.members) {
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:updated", {
+          groupChatId: updated.id,
+        });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      sendError(res, error, "Failed to add group chat member");
+    }
+  });
+
+  app.delete("/api/group-chats/:groupChatId/members/:memberId", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const groupChat = await storage.getGroupChat(req.params.groupChatId, actor.id);
+      if (!groupChat) return res.status(404).json({ message: "Group chat not found" });
+      if (groupChat.creatorId !== actor.id) {
+        return res.status(403).json({ message: "Only the group creator can manage members" });
+      }
+      const updated = await storage.removeGroupChatMember(
+        groupChat.id,
+        actor.id,
+        req.params.memberId,
+      );
+      if (!updated) return res.status(404).json({ message: "Group chat not found" });
+      for (const member of groupChat.members) {
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:updated", {
+          groupChatId: updated.id,
+        });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      sendError(res, error, "Failed to remove group chat member");
     }
   });
 

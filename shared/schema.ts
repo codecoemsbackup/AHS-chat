@@ -429,6 +429,10 @@ export const updateGroupChatSchema = z.object({
   name: z.string().trim().min(1).max(60),
 });
 
+export const updateGroupChatMemberSchema = z.object({
+  memberId: z.string().min(1),
+});
+
 export const insertGroupChatMessageSchema = z.object({
   content: z.string().trim().min(1).max(2000),
 });

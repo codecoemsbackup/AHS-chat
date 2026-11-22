@@ -268,6 +268,8 @@ export interface IStorage {
   getGroupChats(userId: string): Promise<GroupChatWithMembers[]>;
   getGroupChat(groupChatId: string, userId: string): Promise<GroupChatWithMembers | undefined>;
   createGroupChat(userId: string, name: string, friendIds: string[]): Promise<GroupChatWithMembers>;
+  addGroupChatMember(groupChatId: string, ownerId: string, memberId: string): Promise<GroupChatWithMembers | undefined>;
+  removeGroupChatMember(groupChatId: string, ownerId: string, memberId: string): Promise<GroupChatWithMembers | undefined>;
   updateGroupChatName(groupChatId: string, userId: string, name: string): Promise<GroupChatWithMembers | undefined>;
   updateGroupChatProfileImage(groupChatId: string, userId: string, profileImageUrl: string): Promise<GroupChatWithMembers | undefined>;
   deleteGroupChat(groupChatId: string, userId: string): Promise<boolean>;
@@ -1399,6 +1401,107 @@ export class DatabaseStorage implements IStorage {
     const result = await this.getGroupChat(groupChat.id, userId);
     if (!result) throw new Error("Failed to load group chat");
     return result;
+  }
+
+  async addGroupChatMember(
+    groupChatId: string,
+    ownerId: string,
+    memberId: string,
+  ): Promise<GroupChatWithMembers | undefined> {
+    if (memberId === ownerId) throw new Error("The group creator is already a member");
+    const added = await db.transaction(async (transaction) => {
+      const [groupChat] = await transaction
+        .select({ id: groupChats.id })
+        .from(groupChats)
+        .where(and(
+          eq(groupChats.id, groupChatId),
+          eq(groupChats.creatorId, ownerId),
+        ))
+        .for("update");
+      if (!groupChat) return false;
+
+      const [member] = await transaction
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, memberId));
+      if (!member) throw new Error("Member not found");
+
+      const [bannedMember] = await transaction
+        .select({ id: bannedUsers.id })
+        .from(bannedUsers)
+        .where(eq(bannedUsers.userId, memberId))
+        .limit(1);
+      if (bannedMember) throw new Error("Banned members cannot be added to group chats");
+
+      const [friendship] = await transaction
+        .select({ id: dmConversations.id })
+        .from(dmConversations)
+        .where(and(
+          eq(dmConversations.status, "accepted"),
+          sql`(
+            (${dmConversations.participantOneId} = ${ownerId}
+              AND ${dmConversations.participantTwoId} = ${memberId})
+            OR (${dmConversations.participantTwoId} = ${ownerId}
+              AND ${dmConversations.participantOneId} = ${memberId})
+          )`,
+        ))
+        .limit(1);
+      if (!friendship) throw new Error("Groups can only include accepted friends of the creator");
+
+      const currentMembers = await transaction
+        .select({ userId: groupChatMembers.userId })
+        .from(groupChatMembers)
+        .where(eq(groupChatMembers.groupChatId, groupChatId));
+      if (currentMembers.some((current) => current.userId === memberId)) {
+        throw new Error("Member is already in this group chat");
+      }
+      if (currentMembers.length >= 21) {
+        throw new Error("Group chats can have at most 21 members");
+      }
+
+      await transaction.insert(groupChatMembers).values({ groupChatId, userId: memberId });
+      await transaction
+        .update(groupChats)
+        .set({ updatedAt: new Date() })
+        .where(eq(groupChats.id, groupChatId));
+      return true;
+    });
+    return added ? this.getGroupChat(groupChatId, ownerId) : undefined;
+  }
+
+  async removeGroupChatMember(
+    groupChatId: string,
+    ownerId: string,
+    memberId: string,
+  ): Promise<GroupChatWithMembers | undefined> {
+    if (memberId === ownerId) throw new Error("The group creator cannot be removed");
+    const removed = await db.transaction(async (transaction) => {
+      const [groupChat] = await transaction
+        .select({ id: groupChats.id })
+        .from(groupChats)
+        .where(and(
+          eq(groupChats.id, groupChatId),
+          eq(groupChats.creatorId, ownerId),
+        ))
+        .for("update");
+      if (!groupChat) return false;
+
+      const deleted = await transaction
+        .delete(groupChatMembers)
+        .where(and(
+          eq(groupChatMembers.groupChatId, groupChatId),
+          eq(groupChatMembers.userId, memberId),
+        ))
+        .returning({ userId: groupChatMembers.userId });
+      if (!deleted.length) throw new Error("Member is not in this group chat");
+
+      await transaction
+        .update(groupChats)
+        .set({ updatedAt: new Date() })
+        .where(eq(groupChats.id, groupChatId));
+      return true;
+    });
+    return removed ? this.getGroupChat(groupChatId, ownerId) : undefined;
   }
 
   async updateGroupChatName(

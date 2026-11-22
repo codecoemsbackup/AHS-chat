@@ -2081,6 +2081,7 @@ export default function ChatPage() {
             <GroupChatPanel
               groupChat={selectedGroupChat}
               currentUserId={user.id}
+              acceptedFriends={friends}
               onOpenNavigation={() => setMobileNavigationOpen(true)}
               onBack={() => {
                 if (defaultChannel) setLocation(getChannelPath(defaultChannel));
