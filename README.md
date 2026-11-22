@@ -6,7 +6,7 @@ Discord: CodeCoems
 
 Members can send friend requests from the member list. Pending requests remain visible after refresh; accepting a request adds that person to the persistent Friends list and opens a direct-message conversation. The sender can cancel a pending request. Accepted direct messages support replies with quoted message previews.
 
-Accepted friends can be given a private nickname that only the person who set it can see. You can also create named group chats with at least two accepted friends; group messages are available to every group member.
+Accepted friends can be given a private nickname that only the person who set it can see. You can also create named group chats with at least two accepted friends; group messages are available to every group member, and the group creator can change its name or picture and delete the group.
 
 Signed-in chat routes use `/server/<channel>` for channels, `/dms/<username>` for direct messages, and `/groups/<id>` for group chats. The root route redirects to the default channel.
 

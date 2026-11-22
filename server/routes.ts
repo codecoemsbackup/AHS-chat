@@ -15,6 +15,7 @@ import {
   insertDmMessageSchema,
   createDmConversationSchema,
   createGroupChatSchema,
+  updateGroupChatSchema,
   insertGroupChatMessageSchema,
   respondToDmRequestSchema,
   updateFriendNicknameSchema,
@@ -628,6 +629,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(groupChat);
     } catch (error: any) {
       sendError(res, error, "Failed to create group chat");
+    }
+  });
+
+  app.patch("/api/group-chats/:groupChatId", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { name } = updateGroupChatSchema.parse(req.body);
+      const groupChat = await storage.getGroupChat(req.params.groupChatId, actor.id);
+      if (!groupChat) return res.status(404).json({ message: "Group chat not found" });
+      if (groupChat.creatorId !== actor.id) {
+        return res.status(403).json({ message: "Only the group creator can edit this group" });
+      }
+      const updated = await storage.updateGroupChatName(groupChat.id, actor.id, name);
+      if (!updated) return res.status(404).json({ message: "Group chat not found" });
+      for (const member of updated.members) {
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:updated", {
+          groupChatId: updated.id,
+        });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      sendError(res, error, "Failed to update group chat");
+    }
+  });
+
+  app.post("/api/group-chats/:groupChatId/avatar", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const groupChat = await storage.getGroupChat(req.params.groupChatId, actor.id);
+      if (!groupChat) return res.status(404).json({ message: "Group chat not found" });
+      if (groupChat.creatorId !== actor.id) {
+        return res.status(403).json({ message: "Only the group creator can edit this group" });
+      }
+      const upload = await saveUpload(req.body?.dataUrl, "group-picture", {
+        kind: "avatar",
+        maxBytes: MAX_AVATAR_BYTES,
+      });
+      const updated = await storage.updateGroupChatProfileImage(
+        groupChat.id,
+        actor.id,
+        upload.url,
+      );
+      if (!updated) {
+        await removeUpload(upload.url);
+        return res.status(404).json({ message: "Group chat not found" });
+      }
+      await removeUpload(groupChat.profileImageUrl);
+      for (const member of updated.members) {
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:updated", {
+          groupChatId: updated.id,
+        });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      sendError(res, error, "Failed to update group picture");
+    }
+  });
+
+  app.delete("/api/group-chats/:groupChatId", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const groupChat = await storage.getGroupChat(req.params.groupChatId, actor.id);
+      if (!groupChat) return res.status(404).json({ message: "Group chat not found" });
+      if (groupChat.creatorId !== actor.id) {
+        return res.status(403).json({ message: "Only the group creator can delete this group" });
+      }
+      if (!(await storage.deleteGroupChat(groupChat.id, actor.id))) {
+        return res.status(404).json({ message: "Group chat not found" });
+      }
+      await removeUpload(groupChat.profileImageUrl);
+      for (const member of groupChat.members) {
+        ioFor(app)?.to(`user:${member.id}`).emit("group-chat:updated", {
+          groupChatId: groupChat.id,
+        });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      sendError(res, error, "Failed to delete group chat");
     }
   });
 

@@ -244,6 +244,7 @@ export const friendNicknames = pgTable(
 export const groupChats = pgTable("group_chats", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 60 }).notNull(),
+  profileImageUrl: varchar("profile_image_url"),
   creatorId: varchar("creator_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -422,6 +423,10 @@ export const createGroupChatSchema = z.object({
       path: ["memberIds"],
     });
   }
+});
+
+export const updateGroupChatSchema = z.object({
+  name: z.string().trim().min(1).max(60),
 });
 
 export const insertGroupChatMessageSchema = z.object({

@@ -2015,7 +2015,11 @@ export default function ChatPage() {
                       : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                   }`}
                 >
-                  <UsersRound className="h-4 w-4 shrink-0" />
+                  <UserAvatar
+                    name={groupChat.name}
+                    avatarUrl={groupChat.profileImageUrl || undefined}
+                    size="sm"
+                  />
                   <span className="truncate">{groupChat.name}</span>
                   <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
                     {groupChat.members.length}
@@ -2079,6 +2083,12 @@ export default function ChatPage() {
               currentUserId={user.id}
               onOpenNavigation={() => setMobileNavigationOpen(true)}
               onBack={() => {
+                if (defaultChannel) setLocation(getChannelPath(defaultChannel));
+              }}
+              onDeleted={() => {
+                setSelectedGroupChatId(null);
+                setSelectedDmId(null);
+                setMobileNavigationOpen(false);
                 if (defaultChannel) setLocation(getChannelPath(defaultChannel));
               }}
             />

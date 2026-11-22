@@ -268,6 +268,9 @@ export interface IStorage {
   getGroupChats(userId: string): Promise<GroupChatWithMembers[]>;
   getGroupChat(groupChatId: string, userId: string): Promise<GroupChatWithMembers | undefined>;
   createGroupChat(userId: string, name: string, friendIds: string[]): Promise<GroupChatWithMembers>;
+  updateGroupChatName(groupChatId: string, userId: string, name: string): Promise<GroupChatWithMembers | undefined>;
+  updateGroupChatProfileImage(groupChatId: string, userId: string, profileImageUrl: string): Promise<GroupChatWithMembers | undefined>;
+  deleteGroupChat(groupChatId: string, userId: string): Promise<boolean>;
   getGroupChatMessages(groupChatId: string, userId: string): Promise<GroupChatMessageWithSender[]>;
   createGroupChatMessage(groupChatId: string, senderId: string, content: string): Promise<GroupChatMessageWithSender>;
 }
@@ -526,10 +529,13 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`CREATE TABLE IF NOT EXISTS group_chats (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       name varchar(60) NOT NULL,
+      profile_image_url varchar,
       creator_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at timestamp DEFAULT now(),
       updated_at timestamp DEFAULT now()
     )`);
+    await db.execute(sql`ALTER TABLE group_chats
+      ADD COLUMN IF NOT EXISTS profile_image_url varchar`);
     await db.execute(sql`CREATE TABLE IF NOT EXISTS group_chat_members (
       group_chat_id varchar NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
       user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1393,6 +1399,49 @@ export class DatabaseStorage implements IStorage {
     const result = await this.getGroupChat(groupChat.id, userId);
     if (!result) throw new Error("Failed to load group chat");
     return result;
+  }
+
+  async updateGroupChatName(
+    groupChatId: string,
+    userId: string,
+    name: string,
+  ): Promise<GroupChatWithMembers | undefined> {
+    const [updated] = await db
+      .update(groupChats)
+      .set({ name, updatedAt: new Date() })
+      .where(and(
+        eq(groupChats.id, groupChatId),
+        eq(groupChats.creatorId, userId),
+      ))
+      .returning({ id: groupChats.id });
+    return updated ? this.getGroupChat(updated.id, userId) : undefined;
+  }
+
+  async updateGroupChatProfileImage(
+    groupChatId: string,
+    userId: string,
+    profileImageUrl: string,
+  ): Promise<GroupChatWithMembers | undefined> {
+    const [updated] = await db
+      .update(groupChats)
+      .set({ profileImageUrl, updatedAt: new Date() })
+      .where(and(
+        eq(groupChats.id, groupChatId),
+        eq(groupChats.creatorId, userId),
+      ))
+      .returning({ id: groupChats.id });
+    return updated ? this.getGroupChat(updated.id, userId) : undefined;
+  }
+
+  async deleteGroupChat(groupChatId: string, userId: string): Promise<boolean> {
+    const deleted = await db
+      .delete(groupChats)
+      .where(and(
+        eq(groupChats.id, groupChatId),
+        eq(groupChats.creatorId, userId),
+      ))
+      .returning({ id: groupChats.id });
+    return deleted.length > 0;
   }
 
   async getGroupChatMessages(
