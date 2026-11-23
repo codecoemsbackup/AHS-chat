@@ -1,5 +1,4 @@
 import express, { type Express, Response } from "express";
-import rateLimit from "express-rate-limit";
 import { createServer, type Server } from "http";
 import { Server as SocketServer } from "socket.io";
 import passport from "passport";
@@ -53,36 +52,6 @@ import { appendStaffAuditLog, getStaffAuditLogs } from "./staffAuditLog";
 const SERVER_ROOM = "server:main";
 const STAFF_ROOM = "server:main:staff";
 const connectedUsers = new Map<string, string>();
-const loginRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: { message: "Too many sign-in attempts. Try again in 15 minutes." },
-});
-const signupRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 5,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: { message: "Too many sign-up attempts. Try again in an hour." },
-});
-const usernameAvailabilityRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 30,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: { message: "Too many username checks. Try again in 15 minutes." },
-});
-const titanBotRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  keyGenerator: (req) =>
-    (req.user as { claims: { sub: string } }).claims.sub,
-  message: { message: "Titan Bot is getting too many messages. Try again in a minute." },
-});
 
 function isStaffChannel(channelName: string) {
   return channelName.trim().toLowerCase() === "staff";
@@ -182,7 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.use("/uploads", express.static(UPLOAD_ROOT, { maxAge: "1h" }));
 
-  app.get("/api/auth/username-available", usernameAvailabilityRateLimit, async (req: any, res: Response) => {
+  app.get("/api/auth/username-available", async (req: any, res: Response) => {
     const username = String(req.query.username || "").trim();
     if (!isValidUsername(username)) {
       return res.json({
@@ -197,7 +166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.post("/api/auth/local/signup", signupRateLimit, async (req: any, res: Response) => {
+  app.post("/api/auth/local/signup", async (req: any, res: Response) => {
     try {
       const parsed = localSignupSchema.parse(req.body);
       const existing = await storage.getUserByUsername(parsed.username);
@@ -226,7 +195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/local/login", loginRateLimit, async (req: any, res: Response) => {
+  app.post("/api/auth/local/login", async (req: any, res: Response) => {
     try {
       const parsed = localLoginSchema.parse(req.body);
       const user = parsed.username.includes("@")
@@ -638,11 +607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post(
-    "/api/titan-bot/messages",
-    isAuthenticated,
-    titanBotRateLimit,
-    async (req: any, res: Response) => {
+  app.post("/api/titan-bot/messages", isAuthenticated, async (req: any, res: Response) => {
     try {
       const actor = await activeUser(req, res);
       if (!actor) return;
@@ -651,8 +616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!apiKey) {
         return res.status(503).json({
           message: "Titan Bot is not set up yet. The server needs a GROQ_API_KEY.",
-          },
-        );
+        });
       }
 
       const history = await storage.getTitanBotMessages(actor.id, 20);
