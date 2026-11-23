@@ -53,9 +53,7 @@ function Router() {
 function App() {
   useEffect(() => {
     if (window.location.origin === "https://ahs-chat-2d9a.onrender.com") {
-      window.location.replace(
-        `https://ahs-chat-hd5w.onrender.com${window.location.pathname}${window.location.search}${window.location.hash}`,
-      );
+      window.location.replace("https://ahs-chat-hd5w.onrender.com/");
     }
   }, []);
 
