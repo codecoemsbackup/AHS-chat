@@ -363,7 +363,6 @@ export default function ChatPage() {
       (isStaffChannel(activeChannel.name) || isAuditLogChannel(activeChannel.name)),
   });
   const staffAuditLogs = staffAuditQuery.data || [];
-  const staffAuditPreview = staffAuditLogs.slice(0, 5);
 
   useEffect(() => {
     if (location === "/" || location === "") {
@@ -2261,9 +2260,7 @@ export default function ChatPage() {
                       <div className="mb-3 flex items-center gap-2">
                         <ScrollText className="h-4 w-4 text-primary" aria-hidden="true" />
                         <h2 className="text-sm font-semibold">Staff audit log</h2>
-                        <span className="text-xs text-muted-foreground">
-                          {auditLogActive ? "Recent message actions" : "Newest 5 message actions"}
-                        </span>
+                        <span className="text-xs text-muted-foreground">All audit events</span>
                       </div>
                       {staffAuditQuery.isError ? (
                         <div className="flex items-center justify-between gap-3 text-sm text-destructive">
@@ -2279,28 +2276,35 @@ export default function ChatPage() {
                         </div>
                       ) : staffAuditQuery.isLoading ? (
                         <p className="text-sm text-muted-foreground">Loading audit logs...</p>
-                      ) : (auditLogActive ? staffAuditLogs : staffAuditPreview).length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No message actions have been logged yet.</p>
+                      ) : staffAuditLogs.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No audit events have been logged yet.</p>
                       ) : (
-                        <ul className="max-h-56 space-y-2 overflow-y-auto pr-2">
-                          {(auditLogActive ? staffAuditLogs : staffAuditPreview).map((entry) => (
+                        <ul className="space-y-2">
+                          {staffAuditLogs.map((entry) => (
                             <li key={entry.id} className="border-t border-border/70 pt-2 first:border-0 first:pt-0">
                               <p className="text-sm">
                                 <span className="font-medium">{entry.actorName}</span>{" "}
-                                {entry.action === "message_deleted"
-                                  ? `deleted a message${entry.deletedSenderName ? ` from ${entry.deletedSenderName}` : ""}`
-                                  : entry.action === "reaction_added"
-                                    ? `reacted ${entry.emoji || ""} to a message`
-                                    : `removed the ${entry.emoji || ""} reaction from a message`}{" "}
-                                in <span className="font-medium">#{entry.channelName}</span>
+                                {entry.summary || (
+                                  entry.action === "message_deleted"
+                                    ? `deleted a message${entry.deletedSenderName ? ` from ${entry.deletedSenderName}` : ""}`
+                                    : entry.action === "reaction_added"
+                                      ? `reacted ${entry.emoji || ""} to a message`
+                                      : `removed the ${entry.emoji || ""} reaction from a message`
+                                )}
+                                {entry.channelName && (
+                                  <> in <span className="font-medium">#{entry.channelName}</span></>
+                                )}
                               </p>
-                              {entry.action === "message_deleted" && (
-                                <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-2 text-xs">
-                                  {entry.deletedContent ?? "Content unavailable for this older log entry."}
+                              {(entry.details || entry.deletedContent) && (
+                                <p className="mt-1 whitespace-pre-wrap break-words rounded bg-muted/50 p-2 text-xs">
+                                  {entry.details || entry.deletedContent}
                                 </p>
                               )}
                               <p className="text-xs text-muted-foreground">
-                                {new Date(entry.timestamp).toLocaleString()} · Message {entry.messageId}
+                                {new Date(entry.timestamp).toLocaleString()}
+                                {entry.targetName && <> · {entry.targetName}</>}
+                                {entry.targetId && <> · Target {entry.targetId}</>}
+                                {entry.messageId && <> · Message {entry.messageId}</>}
                               </p>
                             </li>
                           ))}

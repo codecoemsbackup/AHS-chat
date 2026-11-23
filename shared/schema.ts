@@ -623,11 +623,36 @@ export type MessageReactionEvent = {
 export type StaffAuditLog = {
   id: string;
   timestamp: string;
-  action: "message_deleted" | "reaction_added" | "reaction_removed";
+  action:
+    | "message_deleted"
+    | "reaction_added"
+    | "reaction_removed"
+    | "channel_created"
+    | "channel_updated"
+    | "channel_deleted"
+    | "admin_permission_changed"
+    | "owner_permission_changed"
+    | "member_renamed"
+    | "member_banned"
+    | "member_unbanned"
+    | "poll_created"
+    | "admin_message_posted"
+    | "group_created"
+    | "group_member_added"
+    | "group_member_removed"
+    | "group_updated"
+    | "group_avatar_updated"
+    | "group_deleted";
   actorName: string;
-  channelId: string;
-  channelName: string;
-  messageId: string;
+  actorId?: string;
+  summary?: string;
+  details?: string;
+  targetId?: string;
+  targetName?: string;
+  channelId?: string;
+  channelName?: string;
+  messageId?: string;
+  messageSenderName?: string;
   deletedSenderName?: string;
   deletedContent?: string;
   emoji?: string;

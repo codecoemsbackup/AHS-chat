@@ -65,7 +65,7 @@ function isPrivateStaffChannel(channelName: string) {
   return isStaffChannel(channelName) || isAuditLogChannel(channelName);
 }
 
-function getDeletedMessageContent(
+function getMessageContentForAudit(
   message: Awaited<ReturnType<typeof storage.getMessageForAudit>>,
 ) {
   if (!message) return undefined;
@@ -786,6 +786,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           groupChatId: groupChat.id,
         });
       }
+      await recordStaffAuditLog(app, {
+        action: "group_created",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `created group chat "${groupChat.name}"`,
+        details: `Group ID: ${groupChat.id}\nMembers: ${groupChat.members.map((member) => member.username || member.id).join(", ")}`,
+        targetId: groupChat.id,
+        targetName: groupChat.name,
+      });
       res.status(201).json(groupChat);
     } catch (error: any) {
       sendError(res, error, "Failed to create group chat");
@@ -809,6 +818,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           groupChatId: updated.id,
         });
       }
+      const addedMember = updated.members.find((member) => member.id === memberId);
+      await recordStaffAuditLog(app, {
+        action: "group_member_added",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `added ${addedMember?.username || memberId} to group chat "${updated.name}"`,
+        details: `Group ID: ${updated.id}\nMember ID: ${memberId}`,
+        targetId: updated.id,
+        targetName: updated.name,
+      });
       res.json(updated);
     } catch (error: any) {
       sendError(res, error, "Failed to add group chat member");
@@ -835,6 +854,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           groupChatId: updated.id,
         });
       }
+      const removedMember = groupChat.members.find((member) => member.id === req.params.memberId);
+      await recordStaffAuditLog(app, {
+        action: "group_member_removed",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `removed ${removedMember?.username || req.params.memberId} from group chat "${groupChat.name}"`,
+        details: `Group ID: ${groupChat.id}\nMember ID: ${req.params.memberId}`,
+        targetId: groupChat.id,
+        targetName: groupChat.name,
+      });
       res.json(updated);
     } catch (error: any) {
       sendError(res, error, "Failed to remove group chat member");
@@ -858,6 +887,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           groupChatId: updated.id,
         });
       }
+      await recordStaffAuditLog(app, {
+        action: "group_updated",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `renamed group chat "${groupChat.name}" to "${updated.name}"`,
+        details: `Group ID: ${groupChat.id}\nPrevious name: ${groupChat.name}\nNew name: ${updated.name}`,
+        targetId: groupChat.id,
+        targetName: updated.name,
+      });
       res.json(updated);
     } catch (error: any) {
       sendError(res, error, "Failed to update group chat");
@@ -892,6 +930,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           groupChatId: updated.id,
         });
       }
+      await recordStaffAuditLog(app, {
+        action: "group_avatar_updated",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `changed the picture for group chat "${updated.name}"`,
+        details: `Group ID: ${updated.id}`,
+        targetId: updated.id,
+        targetName: updated.name,
+      });
       res.json(updated);
     } catch (error: any) {
       sendError(res, error, "Failed to update group picture");
@@ -916,6 +963,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           groupChatId: groupChat.id,
         });
       }
+      await recordStaffAuditLog(app, {
+        action: "group_deleted",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `deleted group chat "${groupChat.name}"`,
+        details: `Group ID: ${groupChat.id}\nMembers at deletion: ${groupChat.members.map((member) => member.username || member.id).join(", ")}`,
+        targetId: groupChat.id,
+        targetName: groupChat.name,
+      });
       res.json({ success: true });
     } catch (error: any) {
       sendError(res, error, "Failed to delete group chat");
@@ -1156,13 +1212,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/channels", isAuthenticated, async (req: any, res: Response) => {
     try {
-      if (!(await adminUser(req, res))) return;
+      const actor = await adminUser(req, res);
+      if (!actor) return;
       const parsed = updateChannelSchema.parse(req.body);
       if (isStaffChannel(parsed.name) || isAuditLogChannel(parsed.name)) {
         return res.status(400).json({ message: "This staff channel name is reserved" });
       }
       const channel = await storage.createChannel(parsed.name, parsed.description);
       ioFor(app)?.to(SERVER_ROOM).emit("channel:created", channel);
+      await recordStaffAuditLog(app, {
+        action: "channel_created",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `created #${channel.name}`,
+        details: `Description: ${channel.description || "(none)"}`,
+        targetId: channel.id,
+        targetName: channel.name,
+        channelId: channel.id,
+        channelName: channel.name,
+      });
       res.status(201).json(channel);
     } catch (error: any) {
       sendError(res, error, "Failed to create channel");
@@ -1171,7 +1239,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/channels/:channelId", isAuthenticated, async (req: any, res: Response) => {
     try {
-      if (!(await adminUser(req, res))) return;
+      const actor = await adminUser(req, res);
+      if (!actor) return;
       const parsed = updateChannelSchema.parse(req.body);
       const channel = await storage.getChannel(req.params.channelId);
       if (!channel || channel.serverId !== "main") {
@@ -1196,6 +1265,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parsed.description,
       );
       ioFor(app)?.to(SERVER_ROOM).emit("channel:updated", updated);
+      await recordStaffAuditLog(app, {
+        action: "channel_updated",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `updated #${updated.name}`,
+        details: [
+          `Previous name: #${channel.name}`,
+          `New name: #${updated.name}`,
+          `Previous description: ${channel.description || "(none)"}`,
+          `New description: ${updated.description || "(none)"}`,
+        ].join("\n"),
+        targetId: channel.id,
+        targetName: updated.name,
+        channelId: channel.id,
+        channelName: updated.name,
+      });
       res.json(updated);
     } catch (error: any) {
       sendError(res, error, "Failed to update channel");
@@ -1204,7 +1289,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/channels/:channelId", isAuthenticated, async (req: any, res: Response) => {
     try {
-      if (!(await adminUser(req, res))) return;
+      const actor = await adminUser(req, res);
+      if (!actor) return;
       const channel = await storage.getChannel(req.params.channelId);
       if (!channel || channel.serverId !== "main") {
         return res.status(404).json({ message: "Channel not found" });
@@ -1214,6 +1300,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       await storage.deleteChannel(channel.id);
       ioFor(app)?.to(SERVER_ROOM).emit("channel:deleted", { channelId: channel.id });
+      await recordStaffAuditLog(app, {
+        action: "channel_deleted",
+        actorId: actor.id,
+        actorName: actor.username || actor.firstName || "Member",
+        summary: `deleted #${channel.name}`,
+        details: `Description: ${channel.description || "(none)"}\nThe channel and its messages were deleted.`,
+        targetId: channel.id,
+        targetName: channel.name,
+        channelId: channel.id,
+        channelName: channel.name,
+      });
       res.json({ success: true });
     } catch (error: any) {
       sendError(res, error, "Failed to delete channel");
@@ -1246,6 +1343,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (parsed.isAdmin) targetSocket?.join(STAFF_ROOM);
         else targetSocket?.leave(STAFF_ROOM);
         ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
+        await recordStaffAuditLog(app, {
+          action: "admin_permission_changed",
+          actorId: actor.id,
+          actorName: actor.username || actor.firstName || "Member",
+          summary: `${parsed.isAdmin ? "granted" : "removed"} admin access for ${target.username || target.firstName}`,
+          details: `Target member ID: ${target.id}\nPrevious admin access: ${target.isAdmin}\nNew admin access: ${parsed.isAdmin}`,
+          targetId: target.id,
+          targetName: target.username || target.firstName || "Member",
+        });
         res.json(publicUser(user, actor));
       } catch (error: any) {
         sendError(res, error, "Failed to update admin permission");
@@ -1279,6 +1385,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (updatedUser.isAdmin) targetSocket?.join(STAFF_ROOM);
         else targetSocket?.leave(STAFF_ROOM);
         ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(updatedUser));
+        await recordStaffAuditLog(app, {
+          action: "owner_permission_changed",
+          actorId: actor.id,
+          actorName: actor.username || actor.firstName || "Member",
+          summary: `${parsed.isOwner ? "granted" : "removed"} owner access for ${target.username || target.firstName}`,
+          details: `Target member ID: ${target.id}\nPrevious owner access: ${target.isOwner}\nNew owner access: ${parsed.isOwner}`,
+          targetId: target.id,
+          targetName: target.username || target.firstName || "Member",
+        });
         res.json(publicUser(updatedUser, actor));
       } catch (error: any) {
         sendError(res, error, "Failed to update owner permission");
@@ -1305,6 +1420,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const user = await storage.updateUsername(target.id, parsed.username);
         ioFor(app)?.to(SERVER_ROOM).emit("member:updated", publicUser(user));
+        await recordStaffAuditLog(app, {
+          action: "member_renamed",
+          actorId: actor.id,
+          actorName: actor.username || actor.firstName || "Member",
+          summary: `renamed ${target.username || target.firstName} to ${user.username}`,
+          details: `Target member ID: ${target.id}`,
+          targetId: target.id,
+          targetName: user.username || user.firstName || "Member",
+        });
         res.json(publicUser(user, actor));
       } catch (error: any) {
         sendError(res, error, "Failed to change member name");
@@ -1335,6 +1459,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isBanned: true,
           banReason: parsed.reason || null,
         }));
+        await recordStaffAuditLog(app, {
+          action: "member_banned",
+          actorId: actor.id,
+          actorName: actor.username || actor.firstName || "Member",
+          summary: `banned ${target.username || target.firstName}`,
+          details: `Target member ID: ${target.id}\nReason: ${parsed.reason?.trim() || "(none provided)"}`,
+          targetId: target.id,
+          targetName: target.username || target.firstName || "Member",
+        });
         res.json({ success: true });
       } catch (error: any) {
         sendError(res, error, "Failed to ban member");
@@ -1347,11 +1480,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     isAuthenticated,
     async (req: any, res: Response) => {
       try {
-        if (!(await adminUser(req, res))) return;
+        const actor = await adminUser(req, res);
+        if (!actor) return;
+        const target = await storage.getUser(req.params.userId);
+        if (!target) return res.status(404).json({ message: "Member not found" });
         await storage.unbanUser(req.params.userId);
         ioFor(app)?.to(SERVER_ROOM).emit("member:updated", {
           userId: req.params.userId,
           isBanned: false,
+        });
+        await recordStaffAuditLog(app, {
+          action: "member_unbanned",
+          actorId: actor.id,
+          actorName: actor.username || actor.firstName || "Member",
+          summary: `unbanned ${target.username || target.firstName}`,
+          details: `Target member ID: ${target.id}`,
+          targetId: target.id,
+          targetName: target.username || target.firstName || "Member",
         });
         res.json({ success: true });
       } catch (error: any) {
@@ -1377,7 +1522,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const auditLogs = await getStaffAuditLogs();
         const logsWithDeletedContent = await Promise.all(auditLogs.map(async (entry) => {
-          if (entry.action !== "message_deleted" || entry.deletedContent) return entry;
+          if (entry.action !== "message_deleted" || entry.deletedContent || !entry.messageId) {
+            return entry;
+          }
           const message = await storage.getMessageForAudit(entry.messageId);
           if (!message) return entry;
           const sender = await storage.getUser(message.senderId);
@@ -1385,7 +1532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...entry,
             deletedSenderName:
               entry.deletedSenderName || sender?.username || sender?.firstName || undefined,
-            deletedContent: getDeletedMessageContent(message),
+            deletedContent: getMessageContentForAudit(message),
           };
         }));
         res.json(logsWithDeletedContent);
@@ -1447,6 +1594,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           allowMultiple: parsed.allowMultiple,
         }, actor.isAdmin);
         ioFor(app)?.to(SERVER_ROOM).emit("message:receive", message);
+        await recordStaffAuditLog(app, {
+          action: "poll_created",
+          actorId: actor.id,
+          actorName: actor.username || actor.firstName || "Member",
+          summary: `created a poll in #${channel.name}`,
+          details: [
+            `Question: ${message.pollData?.question || parsed.question}`,
+            `Options: ${(message.pollData?.options || parsed.options).join(", ")}`,
+            `Multiple selections allowed: ${message.pollData?.allowMultiple ?? parsed.allowMultiple}`,
+          ].join("\n"),
+          targetId: message.id,
+          targetName: message.pollData?.question || parsed.question,
+          channelId: channel.id,
+          channelName: channel.name,
+          messageId: message.id,
+        });
         res.status(201).json(message);
       } catch (error) {
         sendError(res, error, "Failed to create poll");
@@ -1506,20 +1669,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ) {
           return res.status(404).json({ message: "Message not found" });
         }
+        const sourceMessage = await storage.getMessageForAudit(req.params.messageId);
+        const messageSender = sourceMessage
+          ? await storage.getUser(sourceMessage.senderId)
+          : undefined;
         const result = await storage.toggleMessageReaction(
           req.params.messageId,
           actor.id,
           parsed.emoji,
         );
-        const auditLog = await appendStaffAuditLog({
+        await recordStaffAuditLog(app, {
           action: result.added ? "reaction_added" : "reaction_removed",
+          actorId: actor.id,
           actorName: actor.username || actor.firstName || "Member",
+          summary: `${result.added ? "added" : "removed"} ${parsed.emoji} ${
+            result.added ? "reaction to" : "reaction from"
+          } a message in #${channel.name}`,
+          details: getMessageContentForAudit(sourceMessage),
+          targetId: req.params.messageId,
+          targetName: messageSender?.username || messageSender?.firstName || undefined,
           channelId: channel.id,
           channelName: channel.name,
           messageId: req.params.messageId,
+          messageSenderName: messageSender?.username || messageSender?.firstName || undefined,
           emoji: parsed.emoji,
         });
-        ioFor(app)?.to(STAFF_ROOM).emit("staff:audit-log", auditLog);
         const count = result.reactions.find((reaction) => reaction.emoji === parsed.emoji)?.count || 0;
         ioFor(app)?.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:reaction", {
           channelId: channel.id,
@@ -1555,16 +1729,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? await storage.getUser(deletedMessage.senderId)
           : undefined;
         await storage.deleteMessage(req.params.messageId, actor.id);
-        const auditLog = await appendStaffAuditLog({
+        await recordStaffAuditLog(app, {
           action: "message_deleted",
+          actorId: actor.id,
           actorName: actor.username || actor.firstName || "Member",
+          summary: `deleted a message${deletedSender ? ` from ${deletedSender.username || deletedSender.firstName}` : ""} in #${channel.name}`,
+          targetId: req.params.messageId,
+          targetName: deletedSender?.username || deletedSender?.firstName || undefined,
           channelId: channel.id,
           channelName: channel.name,
           messageId: req.params.messageId,
           deletedSenderName: deletedSender?.username || deletedSender?.firstName || undefined,
-          deletedContent: getDeletedMessageContent(deletedMessage),
+          deletedContent: getMessageContentForAudit(deletedMessage),
         });
-        ioFor(app)?.to(STAFF_ROOM).emit("staff:audit-log", auditLog);
         ioFor(app)?.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:deleted", {
           messageId: req.params.messageId,
         });
@@ -1659,6 +1836,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mentionUserIds: validMentionUserIds,
           senderId: userId,
         });
+        if (adminOnlyChannel || mentionsEveryone) {
+          await recordStaffAuditLog(app, {
+            action: "admin_message_posted",
+            actorId: sender.id,
+            actorName: sender.username || sender.firstName || "Member",
+            summary: `posted a message${mentionsEveryone ? " mentioning @everyone" : ""} in #${channel.name}`,
+            details: [
+              getMessageContentForAudit(message),
+              validMentionUserIds.length
+                ? `Mentioned members: ${validMentionUserIds.map((id) =>
+                    members.find((member) => member.id === id)?.username || id
+                  ).join(", ")}`
+                : "",
+            ].filter(Boolean).join("\n\n"),
+            targetId: message.id,
+            targetName: channel.name,
+            channelId: channel.id,
+            channelName: channel.name,
+            messageId: message.id,
+          });
+        }
         io.to(isPrivateStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:receive", message);
       } catch (error) {
         console.error("Error sending message:", error);
@@ -1700,4 +1898,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 function ioFor(app: Express): SocketServer | undefined {
   return app.get("chatIo") as SocketServer | undefined;
+}
+
+async function recordStaffAuditLog(
+  app: Express,
+  event: Parameters<typeof appendStaffAuditLog>[0],
+) {
+  const record = await appendStaffAuditLog(event);
+  ioFor(app)?.to(STAFF_ROOM).emit("staff:audit-log", record);
+  return record;
 }

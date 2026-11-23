@@ -26,7 +26,7 @@ Channel message archives keep Neon database usage bounded. Each channel retains 
 
 On Render, attach a Persistent Disk mounted at `/var/data` and set `MESSAGE_ARCHIVE_DIR=/var/data/message-archives` in the web service environment. The application archives existing overflow at startup and moves the oldest channel messages to disk as new messages arrive. Without this setting, the app keeps the existing database data and rejects new channel messages once a channel reaches 500 database records rather than writing archives to ephemeral storage.
 
-Message deletion and reaction add/remove audit entries are stored as JSON Lines in `staff-audit-logs.jsonl` under `MESSAGE_ARCHIVE_DIR` (or `./data` when it is unset), not in the database. The private `#staff` channel shows the 5 newest entries, while the dedicated admin-only, read-only `#audit-log` channel shows the full log. Use the persistent disk setting above to keep these logs across deployments.
+Audit events are stored as a JSON array in `logs.json` under `MESSAGE_ARCHIVE_DIR` (or `./data` when it is unset), not in the database. The log includes message deletions and reactions, admin messages and polls, channel changes, admin/owner permission changes, member renames and bans, and group-chat management. Both the private `#staff` channel and the dedicated admin-only, read-only `#audit-log` channel show the full history and event details. Existing `staff-audit-logs.jsonl` entries are carried forward when the new log file is first written. Use the persistent disk setting above to keep these logs across deployments.
 
 Users can personalize the app accent and their username display color independently from the Appearance settings.
 
