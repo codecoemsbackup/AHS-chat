@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Menu, Send } from "lucide-react";
+import { ArrowLeft, Menu, Send } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -86,11 +86,13 @@ export default function TitanBotPanel({
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to channels">
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-          <Bot className="h-5 w-5" />
-        </div>
+        <img
+          src="/titan-bot.svg"
+          alt=""
+          className="h-9 w-9 shrink-0 rounded-full"
+        />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-semibold">Titan Bot</h1>
+          <h1 className="truncate font-semibold text-primary">Titan Bot</h1>
           <p className="text-xs text-muted-foreground">AI assistant</p>
         </div>
       </header>
@@ -104,7 +106,7 @@ export default function TitanBotPanel({
             </div>
           ) : isError ? (
             <div className="flex min-h-[45vh] flex-col items-center justify-center text-center">
-              <Bot className="mb-3 h-9 w-9 text-muted-foreground" />
+              <img src="/titan-bot.svg" alt="" className="mb-3 h-9 w-9 rounded-full" />
               <h2 className="font-semibold">Couldn't load Titan Bot</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {error instanceof Error ? error.message : "Refresh the page and try again."}
@@ -133,12 +135,14 @@ export default function TitanBotPanel({
                   })}
                   isSent={message.role === "user"}
                   senderName={message.role === "user" ? currentUserName : "Titan Bot"}
+                  senderColor={message.role === "assistant" ? "hsl(var(--primary))" : undefined}
+                  avatarUrl={message.role === "assistant" ? "/titan-bot.svg" : undefined}
                 />
               </div>
             ))
           ) : (
             <div className="flex min-h-[45vh] flex-col items-center justify-center text-center">
-              <Bot className="mb-3 h-9 w-9 text-primary" />
+              <img src="/titan-bot.svg" alt="" className="mb-3 h-12 w-12 rounded-full" />
               <h2 className="font-semibold">Hey, I’m Titan Bot</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Ask me a question or just say hi.
