@@ -36,11 +36,11 @@ function toHsl(color: string): { hsl: string; luminance: number } | null {
   };
 }
 
-function updateFavicon(color: string) {
+function updateFavicon(color: string, foreground: string) {
   const icon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
   if (!icon) return;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="31" fill="${color}"/><path d="M32 9 51 16v14c0 13-7 22-19 29C20 52 13 43 13 30V16l19-7Z" fill="#0F172A" fill-opacity=".26"/><path d="M32 13 47 19v11c0 10-5 18-15 24-10-6-15-14-15-24V19l15-6Z" fill="#F8FAFC"/><circle cx="26" cy="29" r="2.5" fill="#334155"/><circle cx="38" cy="29" r="2.5" fill="#334155"/><path d="M26 37c2 3 4 4 6 4s4-1 6-4" stroke="#334155" stroke-width="3" stroke-linecap="round"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="31" fill="${color}"/><path d="M17 18h30v8H35v20h-8V26H17z" fill="hsl(${foreground})"/></svg>`;
   icon.type = "image/svg+xml";
   icon.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
@@ -54,9 +54,9 @@ export function applyUserThemeColor(color?: string | null) {
   if (!parsed) return;
 
   const { hsl, luminance } = parsed;
-  updateFavicon(normalizedColor);
   const darkMode = root.classList.contains("dark");
   const foreground = luminance > 0.179 ? "228 31% 8%" : "0 0% 100%";
+  updateFavicon(normalizedColor, foreground);
   const hue = hsl.split(" ")[0];
   const accentForeground = darkMode ? "0 0% 94%" : `${hue} 55% 34%`;
 

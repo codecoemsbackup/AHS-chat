@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import type { TitanBotMessage } from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
+import TitanBotAvatar from "@/components/TitanBotAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -86,11 +87,7 @@ export default function TitanBotPanel({
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to channels">
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <img
-          src="/titan-bot.svg"
-          alt=""
-          className="h-9 w-9 shrink-0 rounded-full"
-        />
+        <TitanBotAvatar className="h-9 w-9 shrink-0" />
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold text-primary">Titan Bot</h1>
           <p className="text-xs text-muted-foreground">AI assistant</p>
@@ -106,7 +103,7 @@ export default function TitanBotPanel({
             </div>
           ) : isError ? (
             <div className="flex min-h-[45vh] flex-col items-center justify-center text-center">
-              <img src="/titan-bot.svg" alt="" className="mb-3 h-9 w-9 rounded-full" />
+              <TitanBotAvatar className="mb-3 h-9 w-9" />
               <h2 className="font-semibold">Couldn't load Titan Bot</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {error instanceof Error ? error.message : "Refresh the page and try again."}
@@ -136,13 +133,17 @@ export default function TitanBotPanel({
                   isSent={message.role === "user"}
                   senderName={message.role === "user" ? currentUserName : "Titan Bot"}
                   senderColor={message.role === "assistant" ? "hsl(var(--primary))" : undefined}
-                  avatarUrl={message.role === "assistant" ? "/titan-bot.svg" : undefined}
+                  avatarContent={
+                    message.role === "assistant"
+                      ? <TitanBotAvatar className="h-8 w-8" />
+                      : undefined
+                  }
                 />
               </div>
             ))
           ) : (
             <div className="flex min-h-[45vh] flex-col items-center justify-center text-center">
-              <img src="/titan-bot.svg" alt="" className="mb-3 h-12 w-12 rounded-full" />
+              <TitanBotAvatar className="mb-3 h-12 w-12" />
               <h2 className="font-semibold">Hey, I’m Titan Bot</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Ask me a question or just say hi.

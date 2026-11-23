@@ -57,6 +57,7 @@ import PollCard from "@/components/PollCard";
 import PollCreateDialog from "@/components/PollCreateDialog";
 import UserAvatar from "@/components/UserAvatar";
 import CodeCoemsCrown from "@/components/CodeCoemsCrown";
+import TitanBotAvatar from "@/components/TitanBotAvatar";
 import AvatarCropDialog from "@/components/AvatarCropDialog";
 import ThemeToggle from "@/components/ThemeToggle";
 import BrandLogo from "@/components/BrandLogo";
@@ -1342,11 +1343,15 @@ export default function ChatPage() {
         }`}
       >
         <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-          <UserAvatar
-            name={peerName}
-            avatarUrl={conversation.peer.profileImageUrl || undefined}
-            size="sm"
-          />
+          {conversation.id === TITAN_BOT_ID ? (
+            <TitanBotAvatar className="h-5 w-5" />
+          ) : (
+            <UserAvatar
+              name={peerName}
+              avatarUrl={conversation.peer.profileImageUrl || undefined}
+              size="sm"
+            />
+          )}
           {(dmUnreadCounts[conversation.id] || 0) > 0 && (
             <span
               className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-sidebar bg-red-600 px-1 text-[10px] font-bold leading-none text-white"

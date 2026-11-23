@@ -67,6 +67,7 @@ function renderTextWithLinks(text: string, keyPrefix: string): ReactNode[] {
 interface ChatBubbleProps {
   message: string;
   messageContent?: ReactNode;
+  avatarContent?: ReactNode;
   timestamp: string;
   isSent: boolean;
   senderName?: string;
@@ -93,6 +94,7 @@ interface ChatBubbleProps {
 export default function ChatBubble({
   message,
   messageContent,
+  avatarContent,
   timestamp,
   isSent,
   senderName,
@@ -127,7 +129,9 @@ export default function ChatBubble({
     >
       {!isSent && senderName && (
         <div className="mt-5 shrink-0">
-          <UserAvatar name={senderName} avatarUrl={avatarUrl || undefined} size="sm" />
+          {avatarContent || (
+            <UserAvatar name={senderName} avatarUrl={avatarUrl || undefined} size="sm" />
+          )}
         </div>
       )}
       <div
