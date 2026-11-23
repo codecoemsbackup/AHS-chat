@@ -620,48 +620,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const history = await storage.getTitanBotMessages(actor.id, 20);
-      const userMessage = await storage.createTitanBotMessage(actor.id, "user", content);
-      let groqResponse: globalThis.Response;
-      try {
-        groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
+      const requestBody = JSON.stringify({
+        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are Titan Bot, a friendly, helpful assistant for students at Titans Academy. Keep replies clear, casual, and age-appropriate. You do not have access to school schedules, grades, student records, or private chats. Never ask for passwords, verification codes, or sensitive personal information. If you do not know something, say so.",
           },
-          body: JSON.stringify({
-            model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-            messages: [
-              {
-                role: "system",
-                content:
-                  "You are Titan Bot, a friendly, helpful assistant for students at Titans Academy. Keep replies clear, casual, and age-appropriate. You do not have access to school schedules, grades, student records, or private chats. Never ask for passwords, verification codes, or sensitive personal information. If you do not know something, say so.",
-              },
-              ...history.map((message) => ({
-                role: message.role,
-                content: message.content,
-              })),
-              { role: "user", content },
-            ],
-            max_tokens: 500,
-          }),
-          signal: AbortSignal.timeout(30_000),
+          ...history.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+          { role: "user", content },
+        ],
+        max_tokens: 500,
+      });
+      let groqResponse: globalThis.Response | undefined;
+      let networkFailure = false;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: requestBody,
+            signal: AbortSignal.timeout(30_000),
+          });
+        } catch {
+          networkFailure = true;
+          if (attempt === 2) break;
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          continue;
+        }
+
+        networkFailure = false;
+        if (groqResponse.ok || (groqResponse.status < 500 && groqResponse.status !== 429)) break;
+        if (attempt === 2) break;
+
+        const retryAfterSeconds = Number(groqResponse.headers.get("retry-after"));
+        const retryDelay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+          ? Math.min(retryAfterSeconds * 1000, 5000)
+          : 500 * (attempt + 1);
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      }
+
+      if (!groqResponse || networkFailure) {
+        console.error("Titan Bot provider request failed after retries");
+        return res.status(502).json({
+          message: "Titan Bot couldn't connect to Groq after a few tries. Please try again.",
         });
-      } catch (error) {
-        console.error("Titan Bot provider request failed", error);
-        return res.status(502).json({ message: "Titan Bot couldn't connect. Please try again." });
       }
 
       if (!groqResponse.ok) {
-        console.error("Titan Bot provider returned an error", groqResponse.status);
+        console.error("Titan Bot provider returned an error after retries", groqResponse.status);
+        if (groqResponse.status === 429) {
+          return res.status(503).json({
+            message: "Titan Bot is busy right now because Groq is rate-limiting requests. Wait a bit and try again.",
+          });
+        }
+        if (groqResponse.status === 401 || groqResponse.status === 403) {
+          return res.status(503).json({
+            message: "Titan Bot's Groq API key is invalid or unavailable. Please let the site owner know.",
+          });
+        }
+        if (groqResponse.status === 400 || groqResponse.status === 404) {
+          return res.status(503).json({
+            message: "Titan Bot's Groq model configuration was rejected. Please let the site owner know.",
+          });
+        }
         return res.status(502).json({
-          message: "Titan Bot is temporarily unavailable. Please try again later.",
+          message: "Groq is temporarily unavailable. Please try again in a little while.",
         });
       }
 
-      const completion = await groqResponse.json() as {
+      let completion: {
         choices?: Array<{ message?: { content?: string | null } }>;
       };
+      try {
+        completion = await groqResponse.json() as typeof completion;
+      } catch {
+        console.error("Titan Bot provider returned invalid JSON");
+        return res.status(502).json({
+          message: "Groq returned an unreadable response. Please try again.",
+        });
+      }
       const reply = completion.choices?.[0]?.message?.content?.trim();
       if (!reply) {
         console.error("Titan Bot provider returned an empty response");
@@ -670,6 +715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const userMessage = await storage.createTitanBotMessage(actor.id, "user", content);
       const botMessage = await storage.createTitanBotMessage(actor.id, "assistant", reply);
       res.json({ userMessage, botMessage });
     } catch (error: any) {
