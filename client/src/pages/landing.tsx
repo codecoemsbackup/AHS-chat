@@ -30,10 +30,9 @@ export default function LandingPage() {
         <section className="py-12 sm:py-16">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
             Hey, Titans!
-            <span className="ml-2 inline-block -rotate-2 text-primary">👋</span>
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-            This is our school chat. Catch up, talk with friends, and share stuff —
+            This is our school chat. Catch up, talk with friends, and share stuff.
             it’s all here.
           </p>
         </section>
