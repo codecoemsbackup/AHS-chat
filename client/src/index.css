@@ -169,6 +169,12 @@
   html {
     min-height: 100%;
     background: hsl(var(--background));
+    background-image:
+      linear-gradient(hsl(var(--background) / 0.25), hsl(var(--background) / 0.25)),
+      var(--local-background-image, none);
+    background-position: center;
+    background-size: cover;
+    background-attachment: fixed;
   }
 
   * {
@@ -176,7 +182,8 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased text-foreground;
+    background: transparent;
     min-height: 100vh;
   }
 }
@@ -186,6 +193,10 @@
     position: relative;
     isolation: isolate;
     background: hsl(var(--background));
+  }
+
+  .has-local-background .app-shell {
+    background: hsl(var(--background) / 0.46);
   }
 
   .glass-panel {
@@ -243,6 +254,14 @@
 
   .chat-content {
     background: hsl(var(--background));
+  }
+
+  .has-local-background .chat-content {
+    background: hsl(var(--background) / 0.5);
+  }
+
+  .has-local-background .glass-panel {
+    background: hsl(var(--card) / 0.9);
   }
 
   .chat-member-row {
