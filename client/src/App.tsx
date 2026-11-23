@@ -1,18 +1,9 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import LandingPage from "@/pages/landing";
 import ChatPage from "@/pages/chat";
@@ -60,30 +51,19 @@ function Router() {
 }
 
 function App() {
-  const [showWrongLinkWarning, setShowWrongLinkWarning] = useState(
-    () => window.location.origin === "https://ahs-chat-2d9a.onrender.com",
-  );
+  useEffect(() => {
+    if (window.location.origin === "https://ahs-chat-2d9a.onrender.com") {
+      window.location.replace(
+        `https://ahs-chat-hd5w.onrender.com${window.location.pathname}${window.location.search}${window.location.hash}`,
+      );
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Router />
-        <AlertDialog open={showWrongLinkWarning}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>You’re on the wrong link</AlertDialogTitle>
-              <AlertDialogDescription>
-                If this site is working, you can continue using it for now.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setShowWrongLinkWarning(false)}>
-                Continue anyway
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </TooltipProvider>
     </QueryClientProvider>
   );
