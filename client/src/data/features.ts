@@ -1,9 +1,22 @@
 export const releases = [
   {
     date: "November 23, 2026",
-    title: "Group chat management and account updates",
+    title: "Titan Bot, security, and appearance updates",
     features: [
+      "Chat with Titan Bot from a built-in direct message available to every signed-in member.",
+      "Titan Bot keeps your personal conversation history and supports formatted messages, lists, code, and readable math.",
+      "The Titans Academy “T” browser favicon and the Titan Bot avatar update with your selected accent color.",
       "Group chat creators can add accepted friends and remove members from group settings.",
+      "Admin tools now record channel changes, message deletions, reactions, polls, member bans and renames, permission changes, and group-chat activity.",
+      "Audit logs show the full event history and saved details, including deleted message text, sender names, attachment names, and poll details.",
+      "Audit history is saved to logs.json on the server's persistent storage and existing audit entries are carried forward.",
+      "Login, sign-up, and Titan Bot requests include rate limits, security headers, safer session cookies, and protection against common web attacks.",
+    ],
+  },
+  {
+    date: "November 23, 2026",
+    title: "Account and redirect updates",
+    features: [
       "Sign in with either your username or your email address.",
       "The old website now redirects to the new site. Accounts did not carry over, so returning users need to sign up again.",
       "The landing page now shows the full feature list and a direct sign-up link.",
@@ -20,11 +33,11 @@ export const releases = [
   },
   {
     date: "November 21, 2026",
-    title: "Persistent channel navigation and separate staff audit log",
+    title: "Persistent channel navigation and staff audit log",
     features: [
       "Refreshing on a channel keeps that channel open and preserves the /server/<channel> address.",
-      "Staff audit activity is stored in a dedicated, admin-only, read-only #audit-log channel.",
-      "The #staff channel shows a compact preview of the 5 newest audit entries.",
+      "Staff audit activity appears in a dedicated, admin-only, read-only #audit-log channel.",
+      "The #staff channel and #audit-log channel show the full audit history.",
     ],
   },
   {
