@@ -1,9 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import LandingPage from "@/pages/landing";
 import ChatPage from "@/pages/chat";
@@ -51,9 +60,26 @@ function Router() {
 }
 
 function App() {
+  const [showRedirectNotice, setShowRedirectNotice] = useState(false);
+
   useEffect(() => {
     if (window.location.origin === "https://ahs-chat-2d9a.onrender.com") {
-      window.location.replace("https://ahs-chat-hd5w.onrender.com/");
+      window.location.replace("https://ahs-chat-hd5w.onrender.com/?redirectedFromOldSite=1");
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    if (
+      url.origin === "https://ahs-chat-hd5w.onrender.com" &&
+      url.searchParams.get("redirectedFromOldSite") === "1"
+    ) {
+      setShowRedirectNotice(true);
+      url.searchParams.delete("redirectedFromOldSite");
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
     }
   }, []);
 
@@ -62,6 +88,22 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router />
+        <AlertDialog open={showRedirectNotice} onOpenChange={setShowRedirectNotice}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>You’ve been redirected to our new website</AlertDialogTitle>
+              <AlertDialogDescription>
+                Accounts from the old website aren’t available here. You’ll need to sign up
+                again to use this site.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowRedirectNotice(false)}>
+                Continue
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </TooltipProvider>
     </QueryClientProvider>
   );
