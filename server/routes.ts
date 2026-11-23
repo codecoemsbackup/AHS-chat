@@ -620,8 +620,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const history = await storage.getTitanBotMessages(actor.id, 20);
+      const defaultModel = "openai/gpt-oss-20b";
+      const configuredModel = process.env.GROQ_MODEL?.trim();
+      const retiredModels = new Set([
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+      ]);
+      const model = configuredModel && !retiredModels.has(configuredModel)
+        ? configuredModel
+        : defaultModel;
+      if (configuredModel && retiredModels.has(configuredModel)) {
+        console.warn(`Titan Bot is ignoring retired GROQ_MODEL "${configuredModel}"`);
+      }
       const requestBody = JSON.stringify({
-        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+        model,
         messages: [
           {
             role: "system",
@@ -634,7 +646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })),
           { role: "user", content },
         ],
-        max_tokens: 500,
+        max_completion_tokens: 500,
       });
       let groqResponse: globalThis.Response | undefined;
       let networkFailure = false;
@@ -679,6 +691,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (groqResponse.status === 429) {
           return res.status(503).json({
             message: "Titan Bot is busy right now because Groq is rate-limiting requests. Wait a bit and try again.",
+          });
+        }
+        if (groqResponse.status === 498) {
+          return res.status(503).json({
+            message: "Groq is at capacity right now. Wait a bit and try again.",
           });
         }
         if (groqResponse.status === 401 || groqResponse.status === 403) {

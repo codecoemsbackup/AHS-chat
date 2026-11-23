@@ -12,7 +12,7 @@ Signed-in chat routes use `/server/<channel>` for channels, `/dms/<username>` fo
 
 Anyone can view `/features` for the feature list and dated patch notes. Add new releases at the top of the releases list in `client/src/pages/features.tsx`.
 
-Titan Bot is available in every signed-in user's DMs. It uses Groq's chat completions API; configure `GROQ_API_KEY` in the server environment. `GROQ_MODEL` is optional and defaults to `llama-3.3-70b-versatile`. Messages sent to Titan Bot are sent to Groq to generate replies, so users should not share passwords or private information.
+Titan Bot is available in every signed-in user's DMs. It uses Groq's chat completions API; configure `GROQ_API_KEY` in the server environment. `GROQ_MODEL` is optional and defaults to `openai/gpt-oss-20b`; retired Llama model overrides are ignored. Messages sent to Titan Bot are sent to Groq to generate replies, so users should not share passwords or private information.
 
 New accounts must provide a real first and last name and a PISD email ending in `.number@mypisd.net` or `@pisd.edu`. Signed-in users without an email are prompted to add one before using the server. Real names and email addresses are visible only to the account holder and owner-role accounts; users missing a name must complete the setup step before using the server. Member rows show usernames and online status; clicking a member opens their profile details where permitted.
 
