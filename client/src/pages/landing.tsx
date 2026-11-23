@@ -28,17 +28,13 @@ export default function LandingPage() {
 
       <main className="relative mx-auto max-w-4xl px-4 pb-16 sm:px-6">
         <section className="py-12 sm:py-16">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">
-            Titans Academy
-          </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
-            What you can do with{" "}
-            <span className="bg-gradient-to-r from-primary to-cyan-500 bg-clip-text text-transparent">
-              AHS Chat
-            </span>
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            Hey, Titans!
+            <span className="ml-2 inline-block -rotate-2 text-primary">👋</span>
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-            The full feature list, from community channels to private group chats.
+            This is our school chat. Catch up, talk with friends, and share stuff —
+            it’s all here.
           </p>
         </section>
 
@@ -75,9 +71,9 @@ export default function LandingPage() {
 
         <section className="mt-12 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/15 via-primary/5 to-cyan-500/10 p-6 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-8">
           <div>
-            <h2 className="text-xl font-bold">Join AHS Chat</h2>
+            <h2 className="text-xl font-bold">Come hang out!</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create an account to get started.
+              Make an account and jump in.
             </p>
           </div>
           <Button
