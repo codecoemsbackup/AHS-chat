@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Hash,
@@ -66,7 +66,6 @@ import ServerSettingsDialog, {
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
 import GroupChatPanel from "@/components/GroupChatPanel";
-import TitanBotPanel from "@/components/TitanBotPanel";
 import RealNameSetup from "@/components/RealNameSetup";
 import EmailSetup from "@/components/EmailSetup";
 import AppearanceSettingsDialog from "@/components/AppearanceSettingsDialog";
@@ -91,6 +90,7 @@ interface ServerData {
 const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls", "staff", "audit-log"]);
 const MESSAGE_PAGE_SIZE = 30;
 const TITAN_BOT_ID = "titan-bot";
+const TitanBotPanel = lazy(() => import("@/components/TitanBotPanel"));
 
 function createTitanBotConversation(userId: string): DmConversationWithPeer {
   const now = new Date();
@@ -2138,13 +2138,21 @@ export default function ChatPage() {
               }}
             />
           ) : selectedDm?.id === TITAN_BOT_ID ? (
-            <TitanBotPanel
-              currentUserName={user.username || "You"}
-              onOpenNavigation={() => setMobileNavigationOpen(true)}
-              onBack={() => {
-                if (defaultChannel) setLocation(getChannelPath(defaultChannel));
-              }}
-            />
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                  Loading Titan Bot...
+                </div>
+              }
+            >
+              <TitanBotPanel
+                currentUserName={user.username || "You"}
+                onOpenNavigation={() => setMobileNavigationOpen(true)}
+                onBack={() => {
+                  if (defaultChannel) setLocation(getChannelPath(defaultChannel));
+                }}
+              />
+            </Suspense>
           ) : selectedDm ? (
             <DirectMessagePanel
               conversation={selectedDm}

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Bot, Menu, Send } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import type { TitanBotMessage } from "@shared/schema";
 import ChatBubble from "@/components/ChatBubble";
 import { Button } from "@/components/ui/button";
@@ -8,6 +12,13 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import "katex/dist/katex.min.css";
+
+function normalizeMathDelimiters(content: string) {
+  return content
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_match, formula: string) => `$$\n${formula}\n$$`)
+    .replace(/\\\(([\s\S]+?)\\\)/g, (_match, formula: string) => `$${formula}$`);
+}
 
 interface TitanBotPanelProps {
   currentUserName: string;
@@ -104,6 +115,18 @@ export default function TitanBotPanel({
               <div key={message.id} data-message-id={message.id}>
                 <ChatBubble
                   message={message.content}
+                  messageContent={
+                    message.role === "assistant" ? (
+                      <div className="prose prose-sm max-w-none break-words dark:prose-invert [&_p]:my-1 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_ul]:my-1 [&_ol]:my-1">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[[rehypeKatex, { throwOnError: false }]]}
+                        >
+                          {normalizeMathDelimiters(message.content)}
+                        </ReactMarkdown>
+                      </div>
+                    ) : undefined
+                  }
                   timestamp={new Date(message.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",

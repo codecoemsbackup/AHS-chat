@@ -66,6 +66,7 @@ function renderTextWithLinks(text: string, keyPrefix: string): ReactNode[] {
 
 interface ChatBubbleProps {
   message: string;
+  messageContent?: ReactNode;
   timestamp: string;
   isSent: boolean;
   senderName?: string;
@@ -91,6 +92,7 @@ interface ChatBubbleProps {
 
 export default function ChatBubble({
   message,
+  messageContent,
   timestamp,
   isSent,
   senderName,
@@ -164,49 +166,57 @@ export default function ChatBubble({
           } ${isMentionedUser ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-background" : ""}`}
         >
           {message && (
-            <p className="m-0 whitespace-pre-wrap break-words text-left text-sm leading-5">
-              {messageParts.map((part, index) => {
-                const isMention =
-                  index % 2 === 1 &&
-                  mentionNames.some(
-                    (name) => `@${name}`.toLowerCase() === part.toLowerCase(),
-                  );
-                return isMention ? (
-                  <span
-                    key={`${part}-${index}`}
-                    className={`mx-0.5 inline-flex items-center rounded-md border px-1.5 py-0.5 font-semibold leading-4 shadow-sm ${
-                      isSent
-                        ? "border-amber-100 bg-amber-300 text-amber-950 ring-2 ring-amber-200/80"
-                        : "border-amber-500 bg-amber-100 text-amber-950 ring-1 ring-amber-300/80 dark:bg-amber-300 dark:text-amber-950"
-                    }`}
-                  >
-                    {part}
-                  </span>
-                ) : (
-                  <Fragment key={`${part}-${index}`}>
-                    {renderTextWithLinks(part, `message-${index}`)}
-                  </Fragment>
-                );
-              })}
-              {gifLinks.map((url) => (
-                <Fragment key={url}>
-                  <br />
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Open GIF"
-                  >
-                    <img
-                      src={url}
-                      alt="GIF"
-                      loading="lazy"
-                      className="mt-2 block max-h-64 max-w-full rounded object-contain"
-                    />
-                  </a>
-                </Fragment>
-              ))}
-            </p>
+            <div
+              className={`m-0 break-words text-left text-sm leading-5 ${
+                messageContent ? "" : "whitespace-pre-wrap"
+              }`}
+            >
+              {messageContent ?? (
+                <>
+                  {messageParts.map((part, index) => {
+                    const isMention =
+                      index % 2 === 1 &&
+                      mentionNames.some(
+                        (name) => `@${name}`.toLowerCase() === part.toLowerCase(),
+                      );
+                    return isMention ? (
+                      <span
+                        key={`${part}-${index}`}
+                        className={`mx-0.5 inline-flex items-center rounded-md border px-1.5 py-0.5 font-semibold leading-4 shadow-sm ${
+                          isSent
+                            ? "border-amber-100 bg-amber-300 text-amber-950 ring-2 ring-amber-200/80"
+                            : "border-amber-500 bg-amber-100 text-amber-950 ring-1 ring-amber-300/80 dark:bg-amber-300 dark:text-amber-950"
+                        }`}
+                      >
+                        {part}
+                      </span>
+                    ) : (
+                      <Fragment key={`${part}-${index}`}>
+                        {renderTextWithLinks(part, `message-${index}`)}
+                      </Fragment>
+                    );
+                  })}
+                  {gifLinks.map((url) => (
+                    <Fragment key={url}>
+                      <br />
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Open GIF"
+                      >
+                        <img
+                          src={url}
+                          alt="GIF"
+                          loading="lazy"
+                          className="mt-2 block max-h-64 max-w-full rounded object-contain"
+                        />
+                      </a>
+                    </Fragment>
+                  ))}
+                </>
+              )}
+            </div>
           )}
           {attachment && (
             <a
