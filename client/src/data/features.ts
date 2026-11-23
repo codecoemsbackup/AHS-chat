@@ -1,5 +1,15 @@
 export const releases = [
   {
+    date: "November 23, 2026",
+    title: "Group chat management and account updates",
+    features: [
+      "Group chat creators can add accepted friends and remove members from group settings.",
+      "Sign in with either your username or your email address.",
+      "The old website now redirects to the new site. Accounts did not carry over, so returning users need to sign up again.",
+      "The landing page now shows the full feature list and a direct sign-up link.",
+    ],
+  },
+  {
     date: "November 22, 2026",
     title: "Friend requests, group chats, and private nicknames",
     features: [
