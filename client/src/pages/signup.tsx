@@ -9,7 +9,7 @@ import { Check, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
-import { isValidUsername } from "@shared/schema";
+import { isValidUsername } from "@shared/username";
 import ThemeToggle from "@/components/ThemeToggle";
 import BrandLogo from "@/components/BrandLogo";
 

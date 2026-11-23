@@ -49,13 +49,15 @@
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
     "date-fns": "^3.6.0",
-    "drizzle-orm": "^0.39.1",
+    "drizzle-orm": "^0.45.4",
     "drizzle-zod": "^0.7.0",
     "embla-carousel-react": "^8.6.0",
     "emoji-picker-react": "^5.1.4",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.7.5",
     "express-session": "^1.18.1",
     "framer-motion": "^11.13.1",
+    "helmet": "^8.3.0",
     "input-otp": "^1.4.2",
     "katex": "^0.19.1",
     "lucide-react": "^0.453.0",
@@ -84,8 +86,7 @@
     "vaul": "^1.1.2",
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
-    "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
@@ -112,5 +113,8 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "overrides": {
+    "katex": "^0.19.1"
   }
 }

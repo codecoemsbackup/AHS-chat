@@ -12,7 +12,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { isValidUsername } from "@shared/schema";
+import { isValidUsername } from "@shared/username";
 
 interface UsernameSetupProps {
   open: boolean;

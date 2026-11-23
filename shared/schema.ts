@@ -13,6 +13,8 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { isValidUsername } from "./username";
+export { isValidUsername, USERNAME_PATTERN } from "./username";
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",
@@ -456,13 +458,6 @@ export const updateGroupChatMemberSchema = z.object({
 export const insertGroupChatMessageSchema = z.object({
   content: z.string().trim().min(1).max(2000),
 });
-
-export const USERNAME_PATTERN = new RegExp("^[\\p{L}\\p{M}\\p{N}_]+$", "u");
-
-export function isValidUsername(username: string): boolean {
-  const length = Array.from(username).length;
-  return length >= 3 && length <= 20 && USERNAME_PATTERN.test(username);
-}
 
 export const updateUsernameSchema = z.object({
   username: z.string().trim().refine(isValidUsername, "Use 3-20 letters or numbers from any language, or underscores."),
