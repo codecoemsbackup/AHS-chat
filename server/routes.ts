@@ -197,9 +197,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/local/login", async (req: any, res: Response) => {
     try {
       const parsed = localLoginSchema.parse(req.body);
-      const user = await storage.getUserByUsername(parsed.username);
+      const user = parsed.username.includes("@")
+        ? await storage.getUserByEmail(parsed.username)
+        : await storage.getUserByUsername(parsed.username);
       if (!user?.passwordHash || !(await verifyPassword(parsed.password, user.passwordHash))) {
-        return res.status(401).json({ message: "Incorrect username or password" });
+        return res.status(401).json({ message: "Incorrect username/email or password" });
       }
       if (await storage.isUserBanned(user.id)) {
         return res.status(403).json({ message: "You are banned from this server" });

@@ -15,11 +15,14 @@ export default function LoginPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
   const loginMutation = useMutation({
-    mutationFn: () => apiRequest("/api/auth/local/login", "POST", { username, password }),
+    mutationFn: () => apiRequest("/api/auth/local/login", "POST", {
+      username: identifier,
+      password,
+    }),
     onSuccess: (user: User) => {
       queryClient.setQueryData(["/api/auth/user"], user);
       setLocation("/");
@@ -27,7 +30,7 @@ export default function LoginPage() {
     onError: (error: any) => {
       toast({
         title: "Couldn't sign in",
-        description: error.message || "Incorrect username or password.",
+        description: error.message || "Incorrect username/email or password.",
         variant: "destructive",
       });
     },
@@ -60,13 +63,13 @@ export default function LoginPage() {
           <CardContent className="space-y-5">
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="login-username">Username</Label>
+                <Label htmlFor="login-identifier">Username or email</Label>
                 <Input
-                  id="login-username"
+                  id="login-identifier"
                   type="text"
-                  placeholder="Enter your username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="Enter your username or email"
+                  value={identifier}
+                  onChange={(event) => setIdentifier(event.target.value)}
                   autoComplete="username"
                   required
                   data-testid="input-username"
@@ -86,7 +89,7 @@ export default function LoginPage() {
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loginMutation.isPending} data-testid="button-login">
-                {loginMutation.isPending ? "Signing in..." : "Sign in with username"}
+                {loginMutation.isPending ? "Signing in..." : "Sign in"}
               </Button>
             </form>
 
