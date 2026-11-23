@@ -223,6 +223,22 @@ export const dmMessageReactions = pgTable(
   ],
 );
 
+export const titanBotMessages = pgTable(
+  "titan_bot_messages",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: varchar("role").$type<"user" | "assistant">().notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("titan_bot_messages_user_created_idx").on(table.userId, table.createdAt, table.id),
+  ],
+);
+
 export const friendNicknames = pgTable(
   "friend_nicknames",
   {
@@ -382,6 +398,10 @@ export const insertDmMessageSchema = z.object({
   }
 });
 export type InsertDmMessage = z.infer<typeof insertDmMessageSchema>;
+
+export const sendTitanBotMessageSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
+});
 
 export const toggleMessageReactionSchema = z.object({
   emoji: z
@@ -618,6 +638,7 @@ export type StaffAuditLog = {
 export type MessagePagination = z.infer<typeof messagePaginationSchema>;
 export type DmConversation = typeof dmConversations.$inferSelect;
 export type DmMessage = typeof dmMessages.$inferSelect;
+export type TitanBotMessage = typeof titanBotMessages.$inferSelect;
 export type DmConversationWithPeer = DmConversation & {
   peer: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "status" | "customStatus" | "isOwner" | "usernameColor"> & {
     nickname?: string | null;

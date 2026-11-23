@@ -8,6 +8,7 @@ import {
   dmConversations,
   dmMessages,
   dmMessageReactions,
+  titanBotMessages,
   friendNicknames,
   groupChats,
   groupChatMembers,
@@ -32,6 +33,7 @@ import {
   type DmMessage,
   type InsertDmMessage,
   type DmMessageWithSender,
+  type TitanBotMessage,
   type GroupChatWithMembers,
   type GroupChatMessageWithSender,
   type MessageReactionSummary,
@@ -263,6 +265,8 @@ export interface IStorage {
     added: boolean;
     reactions: MessageReactionSummary[];
   }>;
+  getTitanBotMessages(userId: string, limit?: number): Promise<TitanBotMessage[]>;
+  createTitanBotMessage(userId: string, role: "user" | "assistant", content: string): Promise<TitanBotMessage>;
   getFriendNickname(ownerId: string, friendId: string): Promise<string | null>;
   setFriendNickname(ownerId: string, friendId: string, nickname: string): Promise<void>;
   getGroupChats(userId: string): Promise<GroupChatWithMembers[]>;
@@ -516,6 +520,16 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS attachment_size integer`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS dm_messages_conversation_created_idx
       ON dm_messages (conversation_id, created_at)`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS titan_bot_messages (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role varchar NOT NULL,
+      content text NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now(),
+      CONSTRAINT titan_bot_messages_role_check CHECK (role IN ('user', 'assistant'))
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS titan_bot_messages_user_created_idx
+      ON titan_bot_messages (user_id, created_at, id)`);
   }
 
   async ensureFriendsAndGroupChatsSchema(): Promise<void> {
@@ -1919,6 +1933,28 @@ export class DatabaseStorage implements IStorage {
     });
     const reactionsByMessage = await this.getDmMessageReactions([messageId], userId);
     return { added, reactions: reactionsByMessage.get(messageId) || [] };
+  }
+
+  async getTitanBotMessages(userId: string, limit = 100): Promise<TitanBotMessage[]> {
+    const rows = await db
+      .select()
+      .from(titanBotMessages)
+      .where(eq(titanBotMessages.userId, userId))
+      .orderBy(desc(titanBotMessages.createdAt), desc(titanBotMessages.id))
+      .limit(Math.min(Math.max(limit, 1), 100));
+    return rows.reverse();
+  }
+
+  async createTitanBotMessage(
+    userId: string,
+    role: "user" | "assistant",
+    content: string,
+  ): Promise<TitanBotMessage> {
+    const [message] = await db
+      .insert(titanBotMessages)
+      .values({ userId, role, content })
+      .returning();
+    return message;
   }
 }
 

@@ -66,6 +66,7 @@ import ServerSettingsDialog, {
 } from "@/components/ServerSettingsDialog";
 import DirectMessagePanel from "@/components/DirectMessagePanel";
 import GroupChatPanel from "@/components/GroupChatPanel";
+import TitanBotPanel from "@/components/TitanBotPanel";
 import RealNameSetup from "@/components/RealNameSetup";
 import EmailSetup from "@/components/EmailSetup";
 import AppearanceSettingsDialog from "@/components/AppearanceSettingsDialog";
@@ -89,6 +90,32 @@ interface ServerData {
 
 const ADMIN_ONLY_CHANNELS = new Set(["rules", "announcements", "polls", "staff", "audit-log"]);
 const MESSAGE_PAGE_SIZE = 30;
+const TITAN_BOT_ID = "titan-bot";
+
+function createTitanBotConversation(userId: string): DmConversationWithPeer {
+  const now = new Date();
+  return {
+    id: TITAN_BOT_ID,
+    participantOneId: userId,
+    participantTwoId: TITAN_BOT_ID,
+    requesterId: userId,
+    status: "accepted",
+    createdAt: now,
+    updatedAt: now,
+    peer: {
+      id: TITAN_BOT_ID,
+      username: TITAN_BOT_ID,
+      firstName: "Titan Bot",
+      profileImageUrl: null,
+      status: "online",
+      customStatus: "AI assistant",
+      isOwner: false,
+      usernameColor: "#a855f7",
+      nickname: null,
+    },
+    isIncoming: false,
+  };
+}
 
 function ConnectionQualityIcon({
   bars,
@@ -257,6 +284,14 @@ export default function ChatPage() {
     queryKey: ["/api/group-chats"],
     enabled: !!user,
   });
+  const titanBotConversation = useMemo(
+    () => user ? createTitanBotConversation(user.id) : null,
+    [user?.id],
+  );
+  const dmConversationsWithBot = useMemo(
+    () => titanBotConversation ? [titanBotConversation, ...dmConversations] : dmConversations,
+    [dmConversations, titanBotConversation],
+  );
   const channels = serverData?.channels || [];
   const members = serverData?.members || [];
   const currentMember = user ? members.find((member) => member.id === user.id) : undefined;
@@ -381,7 +416,7 @@ export default function ChatPage() {
     if (dmMatch) {
       if (dmConversationsLoading) return;
       const peerRoute = decodePathSegment(dmMatch[1]).toLowerCase();
-      const conversation = dmConversations.find(
+      const conversation = dmConversationsWithBot.find(
         (candidate) =>
           candidate.peer.id.toLowerCase() === peerRoute ||
           candidate.peer.username?.toLowerCase() === peerRoute,
@@ -400,6 +435,7 @@ export default function ChatPage() {
     channels,
     defaultChannel,
     dmConversations,
+    dmConversationsWithBot,
     dmConversationsLoading,
     groupChats,
     groupChatsLoading,
@@ -1256,7 +1292,7 @@ export default function ChatPage() {
       ),
     [visibleMembers, memberSearch],
   );
-  const selectedDm = dmConversations.find((conversation) => conversation.id === selectedDmId);
+  const selectedDm = dmConversationsWithBot.find((conversation) => conversation.id === selectedDmId);
   const selectedMemberConversation = selectedMember
     ? dmConversations.find((conversation) => conversation.peer.id === selectedMember.id)
     : undefined;
@@ -1283,7 +1319,9 @@ export default function ChatPage() {
   const friends = dmConversations.filter((conversation) => conversation.status === "accepted");
   const messageRequests = dmConversations.filter((conversation) => conversation.status === "pending");
   const renderDmConversation = (conversation: DmConversationWithPeer) => {
-    const peerName = conversation.peer.nickname ||
+    const peerName = conversation.id === TITAN_BOT_ID
+      ? "Titan Bot"
+      : conversation.peer.nickname ||
       conversation.peer.username ||
       conversation.peer.firstName ||
       "Member";
@@ -2033,6 +2071,12 @@ export default function ChatPage() {
               )}
             </div>
             <div className="mb-2 mt-6 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              <span>AI helper</span>
+            </div>
+            <div className="space-y-1 pb-2">
+              {titanBotConversation && renderDmConversation(titanBotConversation)}
+            </div>
+            <div className="mb-2 mt-4 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               <span>Friends</span>
               <span className="font-normal normal-case tracking-normal">{friends.length || ""}</span>
             </div>
@@ -2090,6 +2134,14 @@ export default function ChatPage() {
                 setSelectedGroupChatId(null);
                 setSelectedDmId(null);
                 setMobileNavigationOpen(false);
+                if (defaultChannel) setLocation(getChannelPath(defaultChannel));
+              }}
+            />
+          ) : selectedDm?.id === TITAN_BOT_ID ? (
+            <TitanBotPanel
+              currentUserName={user.username || "You"}
+              onOpenNavigation={() => setMobileNavigationOpen(true)}
+              onBack={() => {
                 if (defaultChannel) setLocation(getChannelPath(defaultChannel));
               }}
             />

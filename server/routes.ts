@@ -13,6 +13,7 @@ import {
 import {
   insertServerMessageSchema,
   insertDmMessageSchema,
+  sendTitanBotMessageSchema,
   createDmConversationSchema,
   createGroupChatSchema,
   updateGroupChatSchema,
@@ -593,6 +594,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(await storage.getDmConversations(actor.id, actor.isOwner));
     } catch (error) {
       sendError(res, error, "Failed to fetch direct messages", 500);
+    }
+  });
+
+  app.get("/api/titan-bot/messages", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      res.json(await storage.getTitanBotMessages(actor.id));
+    } catch (error) {
+      sendError(res, error, "Failed to fetch Titan Bot messages", 500);
+    }
+  });
+
+  app.post("/api/titan-bot/messages", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res);
+      if (!actor) return;
+      const { content } = sendTitanBotMessageSchema.parse(req.body);
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({
+          message: "Titan Bot is not set up yet. The server needs a GROQ_API_KEY.",
+        });
+      }
+
+      const history = await storage.getTitanBotMessages(actor.id, 20);
+      const userMessage = await storage.createTitanBotMessage(actor.id, "user", content);
+      let groqResponse: globalThis.Response;
+      try {
+        groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are Titan Bot, a friendly, helpful assistant for students at Titans Academy. Keep replies clear, casual, and age-appropriate. You do not have access to school schedules, grades, student records, or private chats. Never ask for passwords, verification codes, or sensitive personal information. If you do not know something, say so.",
+              },
+              ...history.map((message) => ({
+                role: message.role,
+                content: message.content,
+              })),
+              { role: "user", content },
+            ],
+            max_tokens: 500,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        });
+      } catch (error) {
+        console.error("Titan Bot provider request failed", error);
+        return res.status(502).json({ message: "Titan Bot couldn't connect. Please try again." });
+      }
+
+      if (!groqResponse.ok) {
+        console.error("Titan Bot provider returned an error", groqResponse.status);
+        return res.status(502).json({
+          message: "Titan Bot is temporarily unavailable. Please try again later.",
+        });
+      }
+
+      const completion = await groqResponse.json() as {
+        choices?: Array<{ message?: { content?: string | null } }>;
+      };
+      const reply = completion.choices?.[0]?.message?.content?.trim();
+      if (!reply) {
+        console.error("Titan Bot provider returned an empty response");
+        return res.status(502).json({
+          message: "Titan Bot couldn't create a reply. Please try again.",
+        });
+      }
+
+      const botMessage = await storage.createTitanBotMessage(actor.id, "assistant", reply);
+      res.json({ userMessage, botMessage });
+    } catch (error: any) {
+      sendError(res, error, "Failed to send Titan Bot message");
     }
   });
 
