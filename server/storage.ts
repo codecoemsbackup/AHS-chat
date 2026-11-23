@@ -205,6 +205,7 @@ export interface IStorage {
   getChannels(): Promise<Channel[]>;
   getChannel(channelId: string): Promise<Channel | undefined>;
   getChannelForMessage(messageId: string): Promise<Channel | undefined>;
+  getMessageForAudit(messageId: string): Promise<ServerMessage | undefined>;
   createChannel(name: string, description?: string): Promise<Channel>;
   updateChannel(channelId: string, name: string, description?: string): Promise<Channel>;
   deleteChannel(channelId: string): Promise<void>;
@@ -676,6 +677,20 @@ export class DatabaseStorage implements IStorage {
     if (channel) return channel.channel;
     for (const candidate of await this.getChannels()) {
       if (await readArchivedChannelMessage(candidate.id, messageId)) return candidate;
+    }
+    return undefined;
+  }
+
+  async getMessageForAudit(messageId: string): Promise<ServerMessage | undefined> {
+    const [message] = await db
+      .select()
+      .from(serverMessages)
+      .where(eq(serverMessages.id, messageId));
+    if (message) return message;
+
+    for (const channel of await this.getChannels()) {
+      const archived = await readArchivedChannelMessage(channel.id, messageId);
+      if (archived) return archived.message;
     }
     return undefined;
   }

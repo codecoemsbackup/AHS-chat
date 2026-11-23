@@ -2288,12 +2288,17 @@ export default function ChatPage() {
                               <p className="text-sm">
                                 <span className="font-medium">{entry.actorName}</span>{" "}
                                 {entry.action === "message_deleted"
-                                  ? "deleted a message"
+                                  ? `deleted a message${entry.deletedSenderName ? ` from ${entry.deletedSenderName}` : ""}`
                                   : entry.action === "reaction_added"
                                     ? `reacted ${entry.emoji || ""} to a message`
                                     : `removed the ${entry.emoji || ""} reaction from a message`}{" "}
                                 in <span className="font-medium">#{entry.channelName}</span>
                               </p>
+                              {entry.action === "message_deleted" && (
+                                <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-2 text-xs">
+                                  {entry.deletedContent ?? "Content unavailable for this older log entry."}
+                                </p>
+                              )}
                               <p className="text-xs text-muted-foreground">
                                 {new Date(entry.timestamp).toLocaleString()} · Message {entry.messageId}
                               </p>

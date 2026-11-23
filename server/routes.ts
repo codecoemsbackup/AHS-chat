@@ -65,6 +65,19 @@ function isPrivateStaffChannel(channelName: string) {
   return isStaffChannel(channelName) || isAuditLogChannel(channelName);
 }
 
+function getDeletedMessageContent(
+  message: Awaited<ReturnType<typeof storage.getMessageForAudit>>,
+) {
+  if (!message) return undefined;
+  return [
+    message.content.trim(),
+    message.pollData
+      ? `Poll: ${message.pollData.question}\nOptions: ${message.pollData.options.join(", ")}`
+      : "",
+    message.attachmentName ? `Attachment: ${message.attachmentName}` : "",
+  ].filter(Boolean).join("\n\n") || "[No text or attachment content]";
+}
+
 function publicUser(user: any, viewer?: { id: string; isOwner: boolean }) {
   const { passwordHash: _passwordHash, email, ...safeUser } = user;
   const canViewRealName = viewer?.isOwner || viewer?.id === user.id;
@@ -1362,7 +1375,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ) {
           return res.status(404).json({ message: "Channel not found" });
         }
-        res.json(await getStaffAuditLogs());
+        const auditLogs = await getStaffAuditLogs();
+        const logsWithDeletedContent = await Promise.all(auditLogs.map(async (entry) => {
+          if (entry.action !== "message_deleted" || entry.deletedContent) return entry;
+          const message = await storage.getMessageForAudit(entry.messageId);
+          if (!message) return entry;
+          const sender = await storage.getUser(message.senderId);
+          return {
+            ...entry,
+            deletedSenderName:
+              entry.deletedSenderName || sender?.username || sender?.firstName || undefined,
+            deletedContent: getDeletedMessageContent(message),
+          };
+        }));
+        res.json(logsWithDeletedContent);
       } catch (error) {
         sendError(res, error, "Failed to fetch staff audit logs", 500);
       }
@@ -1524,6 +1550,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!actor) return;
         const channel = await storage.getChannelForMessage(req.params.messageId);
         if (!channel) return res.status(404).json({ message: "Message not found" });
+        const deletedMessage = await storage.getMessageForAudit(req.params.messageId);
+        const deletedSender = deletedMessage
+          ? await storage.getUser(deletedMessage.senderId)
+          : undefined;
         await storage.deleteMessage(req.params.messageId, actor.id);
         const auditLog = await appendStaffAuditLog({
           action: "message_deleted",
@@ -1531,6 +1561,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           channelId: channel.id,
           channelName: channel.name,
           messageId: req.params.messageId,
+          deletedSenderName: deletedSender?.username || deletedSender?.firstName || undefined,
+          deletedContent: getDeletedMessageContent(deletedMessage),
         });
         ioFor(app)?.to(STAFF_ROOM).emit("staff:audit-log", auditLog);
         ioFor(app)?.to(isStaffChannel(channel.name) ? STAFF_ROOM : SERVER_ROOM).emit("message:deleted", {

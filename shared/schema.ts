@@ -628,6 +628,8 @@ export type StaffAuditLog = {
   channelId: string;
   channelName: string;
   messageId: string;
+  deletedSenderName?: string;
+  deletedContent?: string;
   emoji?: string;
 };
 export type MessagePagination = z.infer<typeof messagePaginationSchema>;

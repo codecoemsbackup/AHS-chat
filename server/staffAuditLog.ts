@@ -15,6 +15,8 @@ export type StaffAuditLog = {
   channelId: string;
   channelName: string;
   messageId: string;
+  deletedSenderName?: string;
+  deletedContent?: string;
   emoji?: string;
 };
 
