@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import {
+  siteAnnouncements,
   users,
   servers,
   channels,
@@ -17,6 +19,7 @@ import {
   uploads,
   type User,
   type UpsertUser,
+  type SiteAnnouncement,
   type Server,
   type Channel,
   type ServerMessage,
@@ -187,6 +190,10 @@ async function ensureChannelMessageCapacity(
 }
 
 export interface IStorage {
+  ensureSiteAnnouncementSchema(): Promise<void>;
+  getSiteAnnouncement(): Promise<SiteAnnouncement | undefined>;
+  publishSiteAnnouncement(message: string): Promise<SiteAnnouncement>;
+  clearSiteAnnouncement(): Promise<boolean>;
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -283,6 +290,53 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  async ensureSiteAnnouncementSchema(): Promise<void> {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS site_announcements (
+      id varchar PRIMARY KEY,
+      revision varchar NOT NULL,
+      message text NOT NULL,
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`);
+  }
+
+  async getSiteAnnouncement(): Promise<SiteAnnouncement | undefined> {
+    const [announcement] = await db
+      .select()
+      .from(siteAnnouncements)
+      .where(eq(siteAnnouncements.id, "active"));
+    return announcement;
+  }
+
+  async publishSiteAnnouncement(message: string): Promise<SiteAnnouncement> {
+    const revision = randomUUID();
+    const [announcement] = await db
+      .insert(siteAnnouncements)
+      .values({
+        id: "active",
+        revision,
+        message,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: siteAnnouncements.id,
+        set: {
+          revision,
+          message,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return announcement;
+  }
+
+  async clearSiteAnnouncement(): Promise<boolean> {
+    const deleted = await db
+      .delete(siteAnnouncements)
+      .where(eq(siteAnnouncements.id, "active"))
+      .returning({ id: siteAnnouncements.id });
+    return deleted.length > 0;
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown,
   Hash,
+  Megaphone,
   Pencil,
   Plus,
   Shield,
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import CodeCoemsCrown from "@/components/CodeCoemsCrown";
-import type { Channel, User } from "@shared/schema";
+import type { Channel, SiteAnnouncement, User } from "@shared/schema";
 
 export type ServerMember = User & {
   isBanned: boolean;
@@ -49,7 +51,7 @@ export default function ServerSettingsDialog({
   members,
   actor,
 }: ServerSettingsDialogProps) {
-  const [tab, setTab] = useState<"channels" | "members">("channels");
+  const [tab, setTab] = useState<"channels" | "members" | "announcement">("channels");
   const [channelName, setChannelName] = useState("");
   const [channelDescription, setChannelDescription] = useState("");
   const [editingChannel, setEditingChannel] = useState<string | null>(null);
@@ -181,7 +183,7 @@ export default function ServerSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-2 border-b border-border">
+        <div className="flex flex-wrap gap-2 border-b border-border">
           <Button
             variant={tab === "channels" ? "secondary" : "ghost"}
             onClick={() => setTab("channels")}
@@ -196,6 +198,15 @@ export default function ServerSettingsDialog({
           >
             <UserRound className="mr-2 h-4 w-4" /> Members
           </Button>
+          {canAssignOwners && (
+            <Button
+              variant={tab === "announcement" ? "secondary" : "ghost"}
+              onClick={() => setTab("announcement")}
+              className="rounded-b-none"
+            >
+              <Megaphone className="mr-2 h-4 w-4" /> Announcement
+            </Button>
+          )}
         </div>
 
         <ScrollArea className="max-h-[55vh] pr-4">
@@ -298,7 +309,7 @@ export default function ServerSettingsDialog({
                 ))}
               </div>
             </div>
-          ) : (
+          ) : tab === "members" ? (
             <div className="space-y-4">
               <div className="space-y-2">
                 {members.map((member) => (
@@ -379,9 +390,106 @@ export default function ServerSettingsDialog({
                 ))}
               </div>
             </div>
-          )}
+          ) : canAssignOwners ? (
+            <SiteAnnouncementSettings />
+          ) : null}
         </ScrollArea>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SiteAnnouncementSettings() {
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: announcement, isLoading } = useQuery<SiteAnnouncement | null>({
+    queryKey: ["/api/site-announcement"],
+  });
+
+  const publish = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!draft.trim() || saving) return;
+    setSaving(true);
+    try {
+      await apiRequest("/api/site-announcement", "POST", { message: draft.trim() });
+      setDraft("");
+      await queryClient.invalidateQueries({ queryKey: ["/api/site-announcement"] });
+      toast({ title: "Announcement published", description: "It is now visible across the site." });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't publish announcement",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clear = async () => {
+    if (clearing) return;
+    setClearing(true);
+    try {
+      await apiRequest("/api/site-announcement", "DELETE");
+      await queryClient.invalidateQueries({ queryKey: ["/api/site-announcement"] });
+      toast({ title: "Announcement cleared" });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't clear announcement",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <form onSubmit={publish} className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+        <div>
+          <h3 className="font-semibold">Publish a site announcement</h3>
+          <p className="text-sm text-muted-foreground">
+            Visitors will see a banner and a popup once for each new announcement.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="site-announcement-message">Message</Label>
+          <Textarea
+            id="site-announcement-message"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Write an announcement for everyone..."
+            maxLength={500}
+            rows={4}
+          />
+          <p className="text-right text-xs text-muted-foreground">{draft.length}/500</p>
+        </div>
+        <Button type="submit" disabled={!draft.trim() || saving}>
+          <Megaphone className="mr-2 h-4 w-4" />
+          {saving ? "Publishing..." : "Publish"}
+        </Button>
+      </form>
+
+      <section className="space-y-2 rounded-lg border border-border p-4">
+        <h3 className="font-semibold">Active announcement</h3>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading announcement...</p>
+        ) : announcement ? (
+          <>
+            <p className="whitespace-pre-wrap break-words text-sm">{announcement.message}</p>
+            <Button variant="outline" onClick={() => void clear()} disabled={clearing}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {clearing ? "Clearing..." : "Clear announcement"}
+            </Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">There is no active announcement.</p>
+        )}
+      </section>
+    </div>
   );
 }

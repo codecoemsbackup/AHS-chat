@@ -21,7 +21,9 @@ export type StaffAuditAction =
   | "group_member_removed"
   | "group_updated"
   | "group_avatar_updated"
-  | "group_deleted";
+  | "group_deleted"
+  | "site_announcement_published"
+  | "site_announcement_cleared";
 
 export type StaffAuditLog = {
   id: string;

@@ -33,6 +33,7 @@ import {
   localLoginSchema,
   updateRealNameSchema,
   updateEmailSchema,
+  siteAnnouncementInputSchema,
   createPollSchema,
   voteOnPollSchema,
   messagePaginationSchema,
@@ -147,6 +148,59 @@ function isGifCdnUrl(url: URL) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
+  app.get("/api/site-announcement", async (_req, res: Response) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      res.json((await storage.getSiteAnnouncement()) || null);
+    } catch (error) {
+      sendError(res, error, "Failed to fetch site announcement", 500);
+    }
+  });
+
+  app.post("/api/site-announcement", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res, false);
+      if (!actor) return;
+      if (!actor.isOwner || actor.username?.toLowerCase() !== "codecoems") {
+        return res.status(403).json({ message: "Only the site owner can publish announcements" });
+      }
+      const { message } = siteAnnouncementInputSchema.parse(req.body);
+      const announcement = await storage.publishSiteAnnouncement(message);
+      await recordStaffAuditLog(app, {
+        action: "site_announcement_published",
+        actorName: actor.username || "Owner",
+        actorId: actor.id,
+        summary: "Published a site announcement",
+        details: message,
+      });
+      res.json(announcement);
+    } catch (error: any) {
+      sendError(res, error, "Failed to publish site announcement");
+    }
+  });
+
+  app.delete("/api/site-announcement", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res, false);
+      if (!actor) return;
+      if (!actor.isOwner || actor.username?.toLowerCase() !== "codecoems") {
+        return res.status(403).json({ message: "Only the site owner can clear announcements" });
+      }
+      const cleared = await storage.clearSiteAnnouncement();
+      if (cleared) {
+        await recordStaffAuditLog(app, {
+          action: "site_announcement_cleared",
+          actorName: actor.username || "Owner",
+          actorId: actor.id,
+          summary: "Cleared the active site announcement",
+        });
+      }
+      res.json({ cleared });
+    } catch (error: any) {
+      sendError(res, error, "Failed to clear site announcement");
+    }
+  });
+
   app.get("/uploads/:kind/:fileName", async (req, res, next) => {
     try {
       const upload = await getUpload(`${req.params.kind}/${req.params.fileName}`);

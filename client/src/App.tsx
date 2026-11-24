@@ -4,6 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import AnnouncementNotice from "@/components/AnnouncementNotice";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,6 +94,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <AnnouncementNotice />
         <Router />
         <AlertDialog open={showRedirectNotice} onOpenChange={setShowRedirectNotice}>
           <AlertDialogContent>

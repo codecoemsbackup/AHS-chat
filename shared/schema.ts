@@ -64,6 +64,17 @@ export const servers = pgTable("servers", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const siteAnnouncements = pgTable("site_announcements", {
+  id: varchar("id").primaryKey(),
+  revision: varchar("revision").notNull(),
+  message: text("message").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const siteAnnouncementInputSchema = z.object({
+  message: z.string().trim().min(1).max(500),
+});
+
 export const channels = pgTable("channels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   serverId: varchar("server_id")
@@ -563,6 +574,7 @@ export const messagePaginationSchema = z.object({
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Server = typeof servers.$inferSelect;
+export type SiteAnnouncement = typeof siteAnnouncements.$inferSelect;
 export type Channel = typeof channels.$inferSelect;
 export type InsertChannel = z.infer<typeof insertChannelSchema>;
 export type ServerMessage = typeof serverMessages.$inferSelect;
@@ -642,7 +654,9 @@ export type StaffAuditLog = {
     | "group_member_removed"
     | "group_updated"
     | "group_avatar_updated"
-    | "group_deleted";
+    | "group_deleted"
+    | "site_announcement_published"
+    | "site_announcement_cleared";
   actorName: string;
   actorId?: string;
   summary?: string;

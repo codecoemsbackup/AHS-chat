@@ -1862,11 +1862,15 @@ export default function ChatPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="app-shell flex h-dvh min-h-0 overflow-hidden">
+      <div
+        className="app-shell flex min-h-0 overflow-hidden"
+        style={{ height: "calc(100dvh - var(--site-announcement-height, 0px))" }}
+      >
         {(mobileNavigationOpen || mobileMembersOpen) && (
           <button
             type="button"
             className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            style={{ top: "var(--site-announcement-height, 0px)", bottom: 0 }}
             aria-label="Close navigation"
             onClick={() => {
               setMobileNavigationOpen(false);
@@ -1878,6 +1882,7 @@ export default function ChatPage() {
           className={`chat-sidebar glass-panel fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(280px,88vw)] shrink-0 flex-col border-y-0 border-l-0 border-r border-sidebar-border transition-transform duration-200 lg:static lg:z-auto lg:w-[280px] lg:translate-x-0 ${
             mobileNavigationOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           }`}
+          style={{ top: "var(--site-announcement-height, 0px)", bottom: 0 }}
         >
           <div className="flex items-center gap-2 border-b border-sidebar-border p-3 sm:gap-3 sm:p-4">
             <BrandLogo className="h-10 w-10 shrink-0 object-contain" />
@@ -2501,6 +2506,7 @@ export default function ChatPage() {
                 ? "hidden lg:flex"
                 : "hidden"
           } min-h-0 shrink-0 border-y-0 border-r-0 border-l border-border/60 bg-card/95 p-4 lg:static lg:w-64 lg:flex-col lg:bg-card/55`}
+          style={{ top: "var(--site-announcement-height, 0px)", bottom: 0 }}
         >
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
