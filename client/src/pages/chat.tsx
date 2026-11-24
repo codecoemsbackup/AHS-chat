@@ -1970,7 +1970,7 @@ export default function ChatPage() {
             <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
-                  doNotDisturb
+                  currentStatus === "online" && doNotDisturb
                     ? "bg-red-500"
                     : currentStatus === "online"
                       ? "bg-status-online"
@@ -2557,7 +2557,7 @@ export default function ChatPage() {
                       size="sm"
                       showOnlineStatus
                       isOnline={member.status === "online" && !member.isBanned}
-                      isDoNotDisturb={member.doNotDisturb}
+                      isDoNotDisturb={member.status === "online" && member.doNotDisturb}
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm" style={{ color: member.usernameColor }}>
@@ -2574,7 +2574,7 @@ export default function ChatPage() {
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${
-                            member.doNotDisturb
+                            member.status === "online" && member.doNotDisturb
                               ? "bg-red-500"
                               : member.status === "online" && !member.isBanned
                               ? "bg-status-online"
@@ -2583,7 +2583,7 @@ export default function ChatPage() {
                         />
                         {member.isBanned
                           ? "Banned"
-                          : member.doNotDisturb
+                          : member.status === "online" && member.doNotDisturb
                             ? "Do not disturb"
                             : member.status === "online"
                               ? "Online"

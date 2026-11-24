@@ -47,7 +47,7 @@ export default function UserAvatar({
       {showOnlineStatus && (
         <span
           className={`absolute bottom-0 right-0 rounded-full border-2 border-background ${statusSizeClasses[size]} ${
-            isDoNotDisturb ? "bg-red-500" : isOnline ? "bg-status-online" : "bg-status-offline"
+            isOnline ? (isDoNotDisturb ? "bg-red-500" : "bg-status-online") : "bg-status-offline"
           }`}
         />
       )}
