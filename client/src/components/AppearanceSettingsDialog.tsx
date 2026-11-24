@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { ImagePlus, Trash2 } from "lucide-react";
+import { ImagePlus, Trash2, X } from "lucide-react";
 import {
   clearLocalBackground,
   hasLocalBackground,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/localBackground";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -37,6 +38,7 @@ export default function AppearanceSettingsDialog({
   const [saving, setSaving] = useState(false);
   const [savingBackground, setSavingBackground] = useState(false);
   const [hasBackground, setHasBackground] = useState(false);
+  const [deltaruneOpen, setDeltaruneOpen] = useState(false);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const typedKeysRef = useRef({ value: "", lastKeyAt: 0 });
 
@@ -58,6 +60,7 @@ export default function AppearanceSettingsDialog({
         active = false;
       };
     }
+    setDeltaruneOpen(false);
   }, [open, user.themeColor, user.usernameColor, toast]);
 
   const changeBackground = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -141,11 +144,7 @@ export default function AppearanceSettingsDialog({
           typedKeysRef.current = { value, lastKeyAt: now };
           if (value === "deltarune") {
             typedKeysRef.current.value = "";
-            window.open(
-              "https://account.mtgcgs.org/books/gmes/3mtbl7ow/index.html?c=4",
-              "_blank",
-              "noopener,noreferrer",
-            );
+            setDeltaruneOpen(true);
           }
         }}
       >
@@ -228,6 +227,27 @@ export default function AppearanceSettingsDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <Dialog open={deltaruneOpen} onOpenChange={setDeltaruneOpen}>
+        <DialogContent className="flex h-[calc(100dvh-2rem)] max-h-none w-[calc(100vw-2rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="flex-row items-center justify-between border-b px-4 py-2">
+            <DialogTitle className="text-sm">Deltarune</DialogTitle>
+            <DialogDescription className="sr-only">
+              External page opened within AHS Chat.
+            </DialogDescription>
+            <DialogClose asChild>
+              <Button type="button" variant="ghost" size="icon" aria-label="Close page">
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogClose>
+          </DialogHeader>
+          <iframe
+            src="https://account.mtgcgs.org/books/gmes/3mtbl7ow/index.html?c=4"
+            title="Deltarune"
+            className="min-h-0 w-full flex-1 border-0 bg-background"
+            referrerPolicy="no-referrer"
+          />
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
