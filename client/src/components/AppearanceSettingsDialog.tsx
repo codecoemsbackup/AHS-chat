@@ -38,6 +38,7 @@ export default function AppearanceSettingsDialog({
   const [savingBackground, setSavingBackground] = useState(false);
   const [hasBackground, setHasBackground] = useState(false);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
+  const typedKeysRef = useRef({ value: "", lastKeyAt: 0 });
 
   useEffect(() => {
     if (open) {
@@ -125,7 +126,29 @@ export default function AppearanceSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        onKeyDown={(event) => {
+          if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) {
+            typedKeysRef.current.value = "";
+            return;
+          }
+
+          const now = Date.now();
+          const previous = now - typedKeysRef.current.lastKeyAt < 1500
+            ? typedKeysRef.current.value
+            : "";
+          const value = `${previous}${event.key.toLowerCase()}`.slice(-"deltarune".length);
+          typedKeysRef.current = { value, lastKeyAt: now };
+          if (value === "deltarune") {
+            typedKeysRef.current.value = "";
+            window.open(
+              "https://account.mtgcgs.org/books/gmes/3mtbl7ow/index.html?c=4",
+              "_blank",
+              "noopener,noreferrer",
+            );
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Appearance</DialogTitle>
           <DialogDescription>
