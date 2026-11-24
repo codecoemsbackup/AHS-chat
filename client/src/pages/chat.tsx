@@ -23,6 +23,7 @@ import {
   UserPlus,
   Menu,
   ScrollText,
+  FlaskConical,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -2108,6 +2109,14 @@ export default function ChatPage() {
             </div>
           </ScrollArea>
           <div className="border-t border-sidebar-border p-3 text-xs text-muted-foreground">
+            {user.isOwner && (
+              <Button asChild variant="ghost" size="sm" className="mb-2 w-full justify-start">
+                <a href="/test-mode">
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Test mode
+                </a>
+              </Button>
+            )}
             <div className="flex items-center gap-2" aria-live="polite">
               <ConnectionQualityIcon
                 connected={socketConnected}

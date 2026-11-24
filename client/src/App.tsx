@@ -19,9 +19,10 @@ import ChatPage from "@/pages/chat";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
 import FeaturesPage from "@/pages/features";
+import TestModePage from "@/pages/test-mode";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [location] = useLocation();
 
   if (location === "/features") {
@@ -37,6 +38,12 @@ function Router() {
         </div>
       </div>
     );
+  }
+
+  if (location === "/test-mode") {
+    if (!isAuthenticated) return <LoginPage />;
+    if (!user?.isOwner) return <ChatPage />;
+    return <TestModePage />;
   }
 
   return (
