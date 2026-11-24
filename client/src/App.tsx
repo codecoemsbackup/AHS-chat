@@ -19,17 +19,27 @@ import ChatPage from "@/pages/chat";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
 import FeaturesPage from "@/pages/features";
-import TestModePage from "@/pages/test-mode";
 
 function Router() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [location] = useLocation();
+  const isOldSite = window.location.origin === "https://ahs-chat-2d9a.onrender.com";
+  const [oldSiteReady, setOldSiteReady] = useState(!isOldSite);
+
+  useEffect(() => {
+    if (!isOldSite || isLoading) return;
+    if (user?.username?.toLowerCase() === "codecoems") {
+      setOldSiteReady(true);
+      return;
+    }
+    window.location.replace("https://ahs-chat-hd5w.onrender.com/?redirectedFromOldSite=1");
+  }, [isOldSite, isLoading, user?.username]);
 
   if (location === "/features") {
     return <FeaturesPage />;
   }
 
-  if (isLoading) {
+  if (isLoading || !oldSiteReady) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center space-y-3">
@@ -38,12 +48,6 @@ function Router() {
         </div>
       </div>
     );
-  }
-
-  if (location === "/test-mode") {
-    if (!isAuthenticated) return <LoginPage />;
-    if (!user?.isOwner) return <ChatPage />;
-    return <TestModePage />;
   }
 
   return (
@@ -70,11 +74,6 @@ function App() {
   const [showRedirectNotice, setShowRedirectNotice] = useState(false);
 
   useEffect(() => {
-    if (window.location.origin === "https://ahs-chat-2d9a.onrender.com") {
-      window.location.replace("https://ahs-chat-hd5w.onrender.com/?redirectedFromOldSite=1");
-      return;
-    }
-
     const url = new URL(window.location.href);
     if (
       url.origin === "https://ahs-chat-hd5w.onrender.com" &&
