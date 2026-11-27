@@ -347,7 +347,7 @@ export default function DirectMessagePanel({
                           })
                         : "Now"}
                       isSent={message.senderId === currentUserId}
-                      senderName={message.sender.username || message.sender.firstName || "Member"}
+                      senderName={message.sender.nickname || message.sender.username || message.sender.firstName || "Member"}
                       senderColor={message.sender.usernameColor}
                       avatarUrl={message.sender.profileImageUrl}
                       reply={message.reply}
@@ -358,7 +358,7 @@ export default function DirectMessagePanel({
                           content: message.content,
                           senderId: message.senderId,
                           senderName:
-                            message.sender.username || message.sender.firstName || "Member",
+                            message.sender.nickname || message.sender.username || message.sender.firstName || "Member",
                         })
                       }
                       attachment={

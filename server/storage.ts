@@ -1774,6 +1774,7 @@ export class DatabaseStorage implements IStorage {
         ),
       );
     if (!row) return undefined;
+    const nickname = await this.getFriendNickname(userId, row.peer.id);
     return {
       ...row.conversation,
       peer: {
@@ -1785,6 +1786,7 @@ export class DatabaseStorage implements IStorage {
         customStatus: row.peer.customStatus,
         isOwner: row.peer.isOwner,
         usernameColor: row.peer.usernameColor,
+        nickname,
       },
       isIncoming: row.conversation.requesterId !== userId,
     };
@@ -1900,9 +1902,20 @@ export class DatabaseStorage implements IStorage {
       );
     }
     const rows = await db
-      .select({ message: dmMessages, sender: users })
+      .select({
+        message: dmMessages,
+        sender: users,
+        nickname: friendNicknames.nickname,
+      })
       .from(dmMessages)
       .innerJoin(users, eq(users.id, dmMessages.senderId))
+      .leftJoin(
+        friendNicknames,
+        and(
+          eq(friendNicknames.ownerId, userId),
+          eq(friendNicknames.friendId, dmMessages.senderId),
+        ),
+      )
       .where(and(...conditions))
       .orderBy(desc(dmMessages.createdAt), desc(dmMessages.id))
       .limit(pagination.limit + 1);
@@ -1913,14 +1926,15 @@ export class DatabaseStorage implements IStorage {
       userId,
     );
     return {
-      messages: await Promise.all(pageRows.map(async ({ message, sender }) => ({
-        ...await this.withDmReplyPreview(message),
+      messages: await Promise.all(pageRows.map(async ({ message, sender, nickname }) => ({
+        ...await this.withDmReplyPreview(message, userId),
         sender: {
           id: sender.id,
           username: sender.username,
           firstName: canViewRealNames || sender.id === userId ? sender.firstName : null,
           profileImageUrl: sender.profileImageUrl,
           usernameColor: sender.usernameColor,
+          nickname: sender.id === userId ? null : nickname,
         },
         reactions: reactionsByMessage.get(message.id) || [],
       }))),
@@ -1941,12 +1955,24 @@ export class DatabaseStorage implements IStorage {
 
   private async withDmReplyPreview(
     message: DmMessage,
+    viewerId: string,
   ): Promise<DmMessage & { reply?: MessageReplyPreview }> {
     if (!message.replyToId) return message;
     const [row] = await db
-      .select({ message: dmMessages, sender: users })
+      .select({
+        message: dmMessages,
+        sender: users,
+        nickname: friendNicknames.nickname,
+      })
       .from(dmMessages)
       .innerJoin(users, eq(users.id, dmMessages.senderId))
+      .leftJoin(
+        friendNicknames,
+        and(
+          eq(friendNicknames.ownerId, viewerId),
+          eq(friendNicknames.friendId, dmMessages.senderId),
+        ),
+      )
       .where(and(
         eq(dmMessages.id, message.replyToId),
         eq(dmMessages.conversationId, message.conversationId),
@@ -1956,7 +1982,7 @@ export class DatabaseStorage implements IStorage {
       id: row.message.id,
       content: row.message.content,
       senderId: row.message.senderId,
-      senderName: row.sender.username || "Member",
+      senderName: row.nickname || row.sender.username || "Member",
     };
     return { ...message, reply };
   }
@@ -1979,13 +2005,14 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(eq(users.id, senderId));
     return {
-      ...await this.withDmReplyPreview(message),
+      ...await this.withDmReplyPreview(message, senderId),
       sender: {
         id: sender.id,
         username: sender.username,
         firstName: sender.firstName,
         profileImageUrl: sender.profileImageUrl,
         usernameColor: sender.usernameColor,
+        nickname: null,
       },
     };
   }

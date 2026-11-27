@@ -718,7 +718,9 @@ export type DmConversationWithPeer = DmConversation & {
   isIncoming: boolean;
 };
 export type DmMessageWithSender = DmMessage & {
-  sender: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "usernameColor">;
+  sender: Pick<User, "id" | "username" | "firstName" | "profileImageUrl" | "usernameColor"> & {
+    nickname?: string | null;
+  };
   reply?: MessageReplyPreview;
   reactions?: MessageReactionSummary[];
 };

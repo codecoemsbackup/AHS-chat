@@ -1492,10 +1492,17 @@ export default function ChatPage() {
       });
       setNicknameDialogOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["/api/dms"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/group-chats"] });
       await queryClient.invalidateQueries({
         predicate: (query) =>
           typeof query.queryKey[0] === "string" &&
           query.queryKey[0].startsWith("/api/group-chats/") &&
+          query.queryKey[0].endsWith("/messages"),
+      });
+      await queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          query.queryKey[0].startsWith("/api/dms/") &&
           query.queryKey[0].endsWith("/messages"),
       });
       toast({

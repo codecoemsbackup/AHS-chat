@@ -1265,14 +1265,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const participantCanViewName = participantId === actor.id || Boolean(
           participantId === conversation.peer.id && peer?.isOwner,
         );
+        let participantMessage = message;
+        if (participantId !== actor.id) {
+          const senderNickname = await storage.getFriendNickname(participantId, actor.id);
+          participantMessage = {
+            ...message,
+            sender: { ...message.sender, nickname: senderNickname },
+          };
+          if (message.reply) {
+            const replySender = await storage.getUser(message.reply.senderId);
+            const replyNickname = await storage.getFriendNickname(
+              participantId,
+              message.reply.senderId,
+            );
+            participantMessage = {
+              ...participantMessage,
+              reply: {
+                ...message.reply,
+                senderName: replyNickname || replySender?.username || "Member",
+              },
+            };
+          }
+        }
+        if (!participantCanViewName) {
+          participantMessage = {
+            ...participantMessage,
+            sender: { ...participantMessage.sender, firstName: null },
+          };
+        }
         ioFor(app)?.to(`user:${participantId}`).emit("dm:message", {
           conversationId: conversation.id,
-          message: participantCanViewName
-            ? message
-            : {
-                ...message,
-                sender: { ...message.sender, firstName: null },
-              },
+          message: participantMessage,
         });
         ioFor(app)?.to(`user:${participantId}`).emit("dm:updated", {
           conversationId: conversation.id,
