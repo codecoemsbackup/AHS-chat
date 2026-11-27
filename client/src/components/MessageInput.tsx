@@ -11,6 +11,7 @@ import {
   Reply,
   Search,
   Send,
+  Star,
   Vote,
   X,
 } from "lucide-react";
@@ -21,6 +22,8 @@ import {
 } from "@/lib/fileUploads";
 import { replaceEmojiShortcodes } from "@/lib/emojiShortcodes";
 import { apiRequest } from "@/lib/queryClient";
+import useFavoriteGifs from "@/hooks/useFavoriteGifs";
+import type { FavoriteGif } from "@shared/schema";
 
 export interface MentionMember {
   id: string;
@@ -41,6 +44,9 @@ export interface GifResult {
   previewUrl: string;
   width: number;
   height: number;
+  attachmentName?: string;
+  attachmentMimeType?: string;
+  attachmentSize?: number;
 }
 
 interface GifSearchCursor {
@@ -87,6 +93,7 @@ export default function MessageInput({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedGif, setSelectedGif] = useState<GifResult | null>(null);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [gifTab, setGifTab] = useState<"search" | "favorites">("search");
   const [gifQuery, setGifQuery] = useState("");
   const [gifResults, setGifResults] = useState<GifResult[]>([]);
   const [gifProviders, setGifProviders] = useState<string[]>([]);
@@ -97,6 +104,7 @@ export default function MessageInput({
   const [cursorPosition, setCursorPosition] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { favorites, isFavorite, toggleFavorite } = useFavoriteGifs();
 
   useEffect(() => {
     const focusComposer = (event: KeyboardEvent) => {
@@ -214,6 +222,72 @@ export default function MessageInput({
     } finally {
       setGifLoading(false);
     }
+  };
+
+  const selectGif = (gif: GifResult) => {
+    setSelectedGif(gif);
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setGifPickerOpen(false);
+  };
+
+  const toGifResult = (favorite: FavoriteGif): GifResult => ({
+    id: favorite.id,
+    title: favorite.title,
+    url: favorite.url,
+    previewUrl: favorite.previewUrl,
+    width: favorite.width || 240,
+    height: favorite.height || 180,
+    ...(favorite.attachmentName &&
+    favorite.attachmentMimeType &&
+    favorite.attachmentSize
+      ? {
+          attachmentName: favorite.attachmentName,
+          attachmentMimeType: favorite.attachmentMimeType,
+          attachmentSize: favorite.attachmentSize,
+        }
+      : {}),
+  });
+
+  const renderGifOption = (gif: GifResult) => {
+    const saved = isFavorite(gif.url);
+    return (
+      <div key={gif.id} className="group/gif relative overflow-hidden rounded-lg">
+        <button
+          type="button"
+          className="block w-full overflow-hidden rounded-lg border border-transparent transition hover:border-primary focus-visible:border-primary"
+          onClick={() => selectGif(gif)}
+          title={gif.title}
+        >
+          <img
+            src={gif.previewUrl}
+            alt={gif.title}
+            className="aspect-square w-full object-cover"
+            loading="lazy"
+          />
+        </button>
+        <button
+          type="button"
+          className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground opacity-100 shadow transition-opacity md:opacity-0 md:group-hover/gif:opacity-100 md:group-focus-within/gif:opacity-100"
+          aria-label={saved ? "Remove GIF from favorites" : "Add GIF to favorites"}
+          title={saved ? "Remove from favorite GIFs" : "Add to favorite GIFs"}
+          onClick={() =>
+            void toggleFavorite({
+              title: gif.title || "GIF",
+              url: gif.url,
+              previewUrl: gif.previewUrl,
+              width: gif.width,
+              height: gif.height,
+              attachmentName: gif.attachmentName,
+              attachmentMimeType: gif.attachmentMimeType,
+              attachmentSize: gif.attachmentSize,
+            })
+          }
+        >
+          <Star className={`h-4 w-4 ${saved ? "fill-amber-400 text-amber-500" : ""}`} />
+        </button>
+      </div>
+    );
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -404,7 +478,26 @@ export default function MessageInput({
       </div>
       {gifPickerOpen && onSendGif && (
         <div className="glass-panel absolute bottom-20 left-4 z-30 w-[min(23rem,calc(100vw-2rem))] rounded-xl border p-3 shadow-xl">
-          <form
+          <div className="mb-3 flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={gifTab === "search" ? "secondary" : "ghost"}
+              onClick={() => setGifTab("search")}
+            >
+              Search
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={gifTab === "favorites" ? "secondary" : "ghost"}
+              onClick={() => setGifTab("favorites")}
+            >
+              <Star className="mr-1.5 h-3.5 w-3.5" />
+              Favorites ({favorites.length})
+            </Button>
+          </div>
+          {gifTab === "search" && <form
             className="mb-3 flex items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
@@ -428,48 +521,36 @@ export default function MessageInput({
                 <Search className="h-4 w-4" />
               )}
             </Button>
-          </form>
-          {gifError && <p className="mb-2 text-xs text-destructive">{gifError}</p>}
-          {gifLoading && gifResults.length === 0 ? (
+          </form>}
+          {gifTab === "search" && gifError && <p className="mb-2 text-xs text-destructive">{gifError}</p>}
+          {gifTab === "search" && gifLoading && gifResults.length === 0 ? (
             <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Loading GIFs...
             </div>
-          ) : gifResults.length > 0 ? (
+          ) : gifTab === "search" && gifResults.length > 0 ? (
             <div className="grid max-h-64 grid-cols-3 gap-1 overflow-y-auto">
-              {gifResults.map((gif) => (
-                <button
-                  key={gif.id}
-                  type="button"
-                  className="overflow-hidden rounded-lg border border-transparent transition hover:border-primary focus-visible:border-primary"
-                  onClick={() => {
-                    setSelectedGif(gif);
-                    setSelectedFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                    setGifPickerOpen(false);
-                  }}
-                  title={gif.title}
-                >
-                  <img
-                    src={gif.previewUrl}
-                    alt={gif.title}
-                    className="aspect-square w-full object-cover"
-                    loading="lazy"
-                  />
-                </button>
-              ))}
+              {gifResults.map(renderGifOption)}
             </div>
-          ) : (
+          ) : gifTab === "favorites" && favorites.length > 0 ? (
+            <div className="grid max-h-64 grid-cols-3 gap-1 overflow-y-auto">
+              {favorites.map((favorite) => renderGifOption(toGifResult(favorite)))}
+            </div>
+          ) : gifTab === "favorites" ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Favorite GIFs from messages or search and they’ll show up here.
+            </p>
+          ) : !gifLoading && (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Search for a GIF to get started.
             </p>
           )}
-          {gifProviders.length > 0 && (
+          {gifTab === "search" && gifProviders.length > 0 && (
             <p className="mt-2 text-[10px] text-muted-foreground">
               Powered by {gifProviders.join(" and ")}
             </p>
           )}
-          {gifCursor &&
+          {gifTab === "search" && gifCursor &&
             (gifCursor.tenorPos !== null || gifCursor.giphyOffset !== null) && (
               <Button
                 type="button"

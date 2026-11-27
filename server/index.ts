@@ -50,6 +50,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await storage.ensureDmSchema();
+  await storage.ensureFavoriteGifsSchema();
   await storage.ensureSiteAnnouncementSchema();
   await storage.ensureFriendsAndGroupChatsSchema();
   await storage.ensureUploadsSchema();

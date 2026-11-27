@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { resolveGifAttachment } from "@/lib/gifs";
 import { getSocket } from "@/lib/socket";
 import { fileToDataUrl, MAX_AVATAR_BYTES } from "@/lib/fileUploads";
 import type {
@@ -1231,19 +1232,13 @@ export default function ChatPage() {
     if (!activeChannelId || !canSendMessages) return;
     try {
       setAttachmentUploading(true);
-      const uploaded = await apiRequest("/api/gifs/import", "POST", {
-        url: gif.url,
-        fileName: "tenor-gif.gif",
-      });
+      const attachment = await resolveGifAttachment(gif);
       getSocket().emit("message:send", {
         channelId: activeChannelId,
-        content,
+        content: !attachment ? [content, gif.url].filter(Boolean).join("\n") : content,
         replyToId,
         mentionUserIds,
-        attachmentUrl: uploaded.url,
-        attachmentName: uploaded.originalName,
-        attachmentMimeType: uploaded.mimeType,
-        attachmentSize: uploaded.size,
+        ...attachment,
       });
       setReplyingTo(null);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);

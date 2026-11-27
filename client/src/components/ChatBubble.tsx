@@ -1,11 +1,12 @@
 import { Fragment, type ReactNode } from "react";
-import { AtSign, Download, FileText, Reply, Trash2 } from "lucide-react";
+import { AtSign, Download, FileText, Reply, Star, Trash2 } from "lucide-react";
 import UserAvatar from "./UserAvatar";
 import CodeCoemsCrown from "./CodeCoemsCrown";
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/fileUploads";
 import type { MessageReactionSummary, MessageReplyPreview } from "@shared/schema";
 import MessageReactions from "@/components/MessageReactions";
+import useFavoriteGifs from "@/hooks/useFavoriteGifs";
 
 function getGifLinks(message: string): string[] {
   const links = new Set<string>();
@@ -112,6 +113,7 @@ export default function ChatBubble({
   onToggleReaction,
   reactionsDisabled = false,
 }: ChatBubbleProps) {
+  const { isFavorite, toggleFavorite } = useFavoriteGifs();
   const escapedMentionNames = mentionNames
     .filter(Boolean)
     .sort((a, b) => b.length - a.length)
@@ -203,26 +205,89 @@ export default function ChatBubble({
                   {gifLinks.map((url) => (
                     <Fragment key={url}>
                       <br />
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label="Open GIF"
-                      >
-                        <img
-                          src={url}
-                          alt="GIF"
-                          loading="lazy"
-                          className="mt-2 block max-h-64 max-w-full rounded object-contain"
-                        />
-                      </a>
+                      <span className="group/gif relative mt-2 inline-block max-w-full">
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Open GIF"
+                        >
+                          <img
+                            src={url}
+                            alt="GIF"
+                            loading="lazy"
+                            className="block max-h-64 max-w-full rounded object-contain"
+                          />
+                        </a>
+                        {!isSent && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="icon"
+                            className="absolute right-1 top-1 h-8 w-8 opacity-100 shadow md:opacity-0 md:group-hover/gif:opacity-100 md:group-focus-within/gif:opacity-100"
+                            aria-label={isFavorite(url) ? "Remove GIF from favorites" : "Add GIF to favorites"}
+                            title={isFavorite(url) ? "Remove from favorite GIFs" : "Add to favorite GIFs"}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void toggleFavorite({ title: "GIF", url, previewUrl: url });
+                            }}
+                          >
+                            <Star
+                              className={`h-4 w-4 ${isFavorite(url) ? "fill-amber-400 text-amber-500" : ""}`}
+                            />
+                          </Button>
+                        )}
+                      </span>
                     </Fragment>
                   ))}
                 </>
               )}
             </div>
           )}
-          {attachment && (
+          {attachment && (attachment.mimeType.toLowerCase() === "image/gif" ? (
+            <span className="group/gif relative mt-2 inline-block max-w-full">
+              <a
+                href={attachment.url}
+                target="_blank"
+                rel="noreferrer"
+                download={attachment.name}
+                aria-label="Open GIF attachment"
+              >
+                <img
+                  src={attachment.url}
+                  alt={attachment.name}
+                  className="max-h-64 max-w-full rounded object-contain"
+                />
+              </a>
+              {!isSent && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="absolute right-1 top-1 h-8 w-8 opacity-100 shadow md:opacity-0 md:group-hover/gif:opacity-100 md:group-focus-within/gif:opacity-100"
+                  aria-label={isFavorite(attachment.url) ? "Remove GIF from favorites" : "Add GIF to favorites"}
+                  title={isFavorite(attachment.url) ? "Remove from favorite GIFs" : "Add to favorite GIFs"}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void toggleFavorite({
+                      title: attachment.name,
+                      url: attachment.url,
+                      previewUrl: attachment.url,
+                      attachmentName: attachment.name,
+                      attachmentMimeType: attachment.mimeType,
+                      attachmentSize: attachment.size,
+                    });
+                  }}
+                >
+                  <Star
+                    className={`h-4 w-4 ${isFavorite(attachment.url) ? "fill-amber-400 text-amber-500" : ""}`}
+                  />
+                </Button>
+              )}
+            </span>
+          ) : (
             <a
               href={attachment.url}
               target="_blank"
@@ -249,7 +314,7 @@ export default function ChatBubble({
                 </>
               )}
             </a>
-          )}
+          ))}
           {canDelete && onDelete && (
             <Button
               variant="ghost"

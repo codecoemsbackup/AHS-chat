@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  favoriteGifs,
   siteAnnouncements,
   users,
   servers,
@@ -20,6 +21,8 @@ import {
   type User,
   type UpsertUser,
   type SiteAnnouncement,
+  type FavoriteGif,
+  type FavoriteGifInput,
   type Server,
   type Channel,
   type ServerMessage,
@@ -190,6 +193,10 @@ async function ensureChannelMessageCapacity(
 }
 
 export interface IStorage {
+  ensureFavoriteGifsSchema(): Promise<void>;
+  getFavoriteGifs(userId: string): Promise<FavoriteGif[]>;
+  addFavoriteGif(userId: string, favorite: FavoriteGifInput): Promise<FavoriteGif>;
+  removeFavoriteGif(userId: string, favoriteId: string): Promise<boolean>;
   ensureSiteAnnouncementSchema(): Promise<void>;
   getSiteAnnouncement(): Promise<SiteAnnouncement | undefined>;
   publishSiteAnnouncement(message: string): Promise<SiteAnnouncement>;
@@ -290,6 +297,62 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  async ensureFavoriteGifsSchema(): Promise<void> {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS favorite_gifs (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title varchar(200) NOT NULL,
+      url varchar(2048) NOT NULL,
+      preview_url varchar(2048) NOT NULL,
+      width integer,
+      height integer,
+      attachment_name varchar(120),
+      attachment_mime_type varchar(120),
+      attachment_size integer,
+      created_at timestamp NOT NULL DEFAULT now()
+    )`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS favorite_gifs_user_url_unique
+      ON favorite_gifs (user_id, url)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS favorite_gifs_user_created_idx
+      ON favorite_gifs (user_id, created_at)`);
+  }
+
+  async getFavoriteGifs(userId: string): Promise<FavoriteGif[]> {
+    return db
+      .select()
+      .from(favoriteGifs)
+      .where(eq(favoriteGifs.userId, userId))
+      .orderBy(desc(favoriteGifs.createdAt));
+  }
+
+  async addFavoriteGif(userId: string, favorite: FavoriteGifInput): Promise<FavoriteGif> {
+    const [saved] = await db
+      .insert(favoriteGifs)
+      .values({ ...favorite, userId })
+      .onConflictDoUpdate({
+        target: [favoriteGifs.userId, favoriteGifs.url],
+        set: {
+          title: favorite.title,
+          previewUrl: favorite.previewUrl,
+          width: favorite.width ?? null,
+          height: favorite.height ?? null,
+          attachmentName: favorite.attachmentName ?? null,
+          attachmentMimeType: favorite.attachmentMimeType ?? null,
+          attachmentSize: favorite.attachmentSize ?? null,
+        },
+      })
+      .returning();
+    return saved;
+  }
+
+  async removeFavoriteGif(userId: string, favoriteId: string): Promise<boolean> {
+    const deleted = await db
+      .delete(favoriteGifs)
+      .where(and(eq(favoriteGifs.userId, userId), eq(favoriteGifs.id, favoriteId)))
+      .returning({ id: favoriteGifs.id });
+    return deleted.length > 0;
+  }
+
   async ensureSiteAnnouncementSchema(): Promise<void> {
     await db.execute(sql`CREATE TABLE IF NOT EXISTS site_announcements (
       id varchar PRIMARY KEY,

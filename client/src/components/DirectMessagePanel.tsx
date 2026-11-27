@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { fileToDataUrl } from "@/lib/fileUploads";
 import { apiRequest } from "@/lib/queryClient";
+import { resolveGifAttachment } from "@/lib/gifs";
 
 const MESSAGE_PAGE_SIZE = 30;
 
@@ -222,16 +223,12 @@ export default function DirectMessagePanel({
           attachmentSize: uploaded.size,
         };
       } else if (gif) {
-        const uploaded = await apiRequest("/api/gifs/import", "POST", { url: gif.url });
-        attachment = {
-          attachmentUrl: uploaded.url,
-          attachmentName: uploaded.originalName,
-          attachmentMimeType: uploaded.mimeType,
-          attachmentSize: uploaded.size,
-        };
+        attachment = await resolveGifAttachment(gif);
       }
       const message: DmMessageWithSender = await apiRequest(messagesUrl, "POST", {
-        content,
+        content: gif && !attachment
+          ? [content, gif.url].filter(Boolean).join("\n")
+          : content,
         replyToId,
         ...attachment,
       });

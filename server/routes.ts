@@ -33,6 +33,7 @@ import {
   localLoginSchema,
   updateRealNameSchema,
   updateEmailSchema,
+  favoriteGifInputSchema,
   siteAnnouncementInputSchema,
   createPollSchema,
   voteOnPollSchema,
@@ -146,6 +147,17 @@ function isGifCdnUrl(url: URL) {
   );
 }
 
+function isAllowedFavoriteGifUrl(value: string) {
+  if (/^\/uploads\/[a-z]+\/[^/?#]+$/.test(value)) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      (isGifCdnUrl(url) || /\.gif$/i.test(url.pathname));
+  } catch {
+    return false;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
   app.get("/api/site-announcement", async (_req, res: Response) => {
@@ -154,6 +166,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json((await storage.getSiteAnnouncement()) || null);
     } catch (error) {
       sendError(res, error, "Failed to fetch site announcement", 500);
+    }
+  });
+
+  app.get("/api/favorite-gifs", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res, false);
+      if (!actor) return;
+      res.json(await storage.getFavoriteGifs(actor.id));
+    } catch (error) {
+      sendError(res, error, "Failed to fetch favorite GIFs", 500);
+    }
+  });
+
+  app.post("/api/favorite-gifs", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res, false);
+      if (!actor) return;
+      const favorite = favoriteGifInputSchema.parse(req.body);
+      if (
+        !isAllowedFavoriteGifUrl(favorite.url) ||
+        !isAllowedFavoriteGifUrl(favorite.previewUrl)
+      ) {
+        return res.status(400).json({ message: "Only GIF image URLs can be favorited" });
+      }
+      if (
+        favorite.url.startsWith("/uploads/") &&
+        (
+          favorite.attachmentMimeType?.toLowerCase() !== "image/gif" ||
+          !favorite.attachmentName ||
+          !favorite.attachmentSize
+        )
+      ) {
+        return res.status(400).json({ message: "Uploaded GIF details are required" });
+      }
+      const saved = await storage.addFavoriteGif(actor.id, favorite);
+      res.status(201).json(saved);
+    } catch (error: any) {
+      sendError(res, error, "Failed to favorite GIF");
+    }
+  });
+
+  app.delete("/api/favorite-gifs/:favoriteId", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const actor = await activeUser(req, res, false);
+      if (!actor) return;
+      const removed = await storage.removeFavoriteGif(actor.id, req.params.favoriteId);
+      if (!removed) return res.status(404).json({ message: "Favorite GIF not found" });
+      res.json({ removed: true });
+    } catch (error) {
+      sendError(res, error, "Failed to remove favorite GIF", 500);
     }
   });
 

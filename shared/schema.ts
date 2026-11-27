@@ -75,6 +75,40 @@ export const siteAnnouncementInputSchema = z.object({
   message: z.string().trim().min(1).max(500),
 });
 
+export const favoriteGifs = pgTable(
+  "favorite_gifs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 200 }).notNull(),
+    url: varchar("url", { length: 2048 }).notNull(),
+    previewUrl: varchar("preview_url", { length: 2048 }).notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    attachmentName: varchar("attachment_name", { length: 120 }),
+    attachmentMimeType: varchar("attachment_mime_type", { length: 120 }),
+    attachmentSize: integer("attachment_size"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("favorite_gifs_user_url_unique").on(table.userId, table.url),
+    index("favorite_gifs_user_created_idx").on(table.userId, table.createdAt),
+  ],
+);
+
+export const favoriteGifInputSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  url: z.string().trim().min(1).max(2048),
+  previewUrl: z.string().trim().min(1).max(2048),
+  width: z.number().int().positive().max(8192).nullable().optional(),
+  height: z.number().int().positive().max(8192).nullable().optional(),
+  attachmentName: z.string().trim().min(1).max(120).nullable().optional(),
+  attachmentMimeType: z.string().trim().min(1).max(120).nullable().optional(),
+  attachmentSize: z.number().int().positive().max(8 * 1024 * 1024).nullable().optional(),
+});
+
 export const channels = pgTable("channels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   serverId: varchar("server_id")
@@ -575,6 +609,8 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Server = typeof servers.$inferSelect;
 export type SiteAnnouncement = typeof siteAnnouncements.$inferSelect;
+export type FavoriteGif = typeof favoriteGifs.$inferSelect;
+export type FavoriteGifInput = z.infer<typeof favoriteGifInputSchema>;
 export type Channel = typeof channels.$inferSelect;
 export type InsertChannel = z.infer<typeof insertChannelSchema>;
 export type ServerMessage = typeof serverMessages.$inferSelect;

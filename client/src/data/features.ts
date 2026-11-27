@@ -1,6 +1,15 @@
 export const releases = [
   {
     date: "November 27, 2026",
+    title: "Favorite GIFs",
+    features: [
+      "Save GIFs from other members’ messages with the star that appears when you hover over a GIF.",
+      "Manage favorite GIFs in the GIF picker and use them in channels and direct messages.",
+      "Favorite GIFs are saved to your account and available across devices.",
+    ],
+  },
+  {
+    date: "November 27, 2026",
     title: "Site announcements and appearance updates",
     features: [
       "The site owner can publish or clear a global announcement from Server settings; visitors see a dismissible banner and a popup once per announcement.",
