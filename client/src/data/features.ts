@@ -1,5 +1,15 @@
 export const releases = [
   {
+    date: "November 27, 2026",
+    title: "Site announcements and appearance updates",
+    features: [
+      "The site owner can publish or clear a global announcement from Server settings; visitors see a dismissible banner and a popup once per announcement.",
+      "Announcement publishing and clearing are recorded in the staff audit history.",
+      "Type “deltarune” in Appearance to open the linked page inside AHS Chat.",
+      "Offline members now appear offline even when Do Not Disturb is enabled.",
+    ],
+  },
+  {
     date: "November 23, 2026",
     title: "Titan Bot, security, and appearance updates",
     features: [
