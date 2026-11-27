@@ -5,3 +5,4 @@ server/public
 uploads
 vite.config.ts.*
 *.tar.gz
+/games/dustin-windows.zip
