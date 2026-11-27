@@ -1,6 +1,13 @@
 export const releases = [
   {
     date: "November 27, 2026",
+    title: "Friend nickname display",
+    features: [
+      "Private friend nicknames now appear in direct message headers, message sender names, reply previews, and group chat member lists and messages; only you see your nicknames.",
+    ],
+  },
+  {
+    date: "November 27, 2026",
     title: "Favorite GIFs",
     features: [
       "Save GIFs from other members’ messages with the star that appears when you hover over a GIF.",
